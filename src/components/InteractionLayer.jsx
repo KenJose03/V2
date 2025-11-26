@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, Clock, Play, Square } from 'lucide-react';
-import { ref, push, onValue, runTransaction, update, set } from 'firebase/database';
+import { Send, ChevronUp, ChevronDown, Clock, Play, Square, Eye } from 'lucide-react'; // Added Eye
+import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove } from 'firebase/database'; // Added onDisconnect, remove
 import { db } from '../lib/firebase';
 
 export const InteractionLayer = ({ roomId, isHost }) => {
@@ -10,6 +10,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const [input, setInput] = useState("");
   const [currentBid, setCurrentBid] = useState(0);
   const [customBid, setCustomBid] = useState(10);
+  const [viewerCount, setViewerCount] = useState(0); // NEW: Viewer Count State
   
   // Auction State
   const [isAuctionActive, setIsAuctionActive] = useState(false);
@@ -19,7 +20,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const chatEndRef = useRef(null);
   
   // --- REFS (These fix the "Stale State" / Wrong Price Bug) ---
-  // These allow the Timer to see the "Live" values without resetting
   const isAuctionActiveRef = useRef(false);
   const currentBidRef = useRef(0); 
 
@@ -28,6 +28,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
+    const viewersRef = ref(db, `rooms/${roomId}/viewers`); // NEW: Reference for viewers
 
     const unsubChat = onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
@@ -59,10 +60,35 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       });
     });
 
-    return () => { unsubChat(); unsubBid(); unsubAuction(); };
+    // NEW: Listen for changes in viewer count
+    const unsubViewers = onValue(viewersRef, (snapshot) => {
+        setViewerCount(snapshot.size); // Firebase .size returns the count efficiently
+    });
+
+    return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); };
   }, [roomId]);
 
-  // --- 2. COUNTDOWN TIMER ---
+  // --- 2. PRESENCE SYSTEM (NEW: Tracks Audience) ---
+  useEffect(() => {
+      // If I am a viewer (not host), register my presence
+      if (!isHost) {
+          const userId = Math.random().toString(36).substring(2, 15);
+          const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
+
+          // 1. Add myself to the list
+          set(myPresenceRef, true);
+
+          // 2. Auto-remove if I disconnect (close tab/internet loss)
+          onDisconnect(myPresenceRef).remove();
+
+          // 3. Remove if I navigate away locally
+          return () => {
+              remove(myPresenceRef);
+          };
+      }
+  }, [roomId, isHost]);
+
+  // --- 3. COUNTDOWN TIMER ---
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
@@ -89,7 +115,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   }, [messages]);
 
 
-  // --- 3. ACTIONS & CONTROLS ---
+  // --- 4. ACTIONS & CONTROLS ---
   const sendMessage = (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -145,7 +171,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     });
   };
 
-  // --- 4. AUCTION MANAGEMENT ---
+  // --- 5. AUCTION MANAGEMENT ---
   const startAuction = () => {
       const DURATION_SECONDS = 30;
       const newEndTime = Date.now() + (DURATION_SECONDS * 1000);
@@ -162,7 +188,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   };
 
   const stopAuction = () => {
-      // BUG FIX: Read from the Ref (Fresh Value) instead of State (Stale Value)
+      // Fix: Send "SOLD" message FIRST using the Ref
       const finalPrice = currentBidRef.current;
 
       if (isAuctionActiveRef.current) { 
@@ -172,12 +198,11 @@ export const InteractionLayer = ({ roomId, isHost }) => {
         });
       }
 
+      // THEN kill the auction state
       update(ref(db, `rooms/${roomId}`), {
           "auction/isActive": false,
           "auction/endTime": 0
       });
-
-      
   };
 
   const toggleAuction = () => {
@@ -188,9 +213,15 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   return (
     <div className="absolute inset-0 z-20 flex flex-col justify-end pb-20 px-4 pointer-events-none overflow-hidden">
       
-      {/* --- TOP RIGHT: PRICE --- */}
+      {/* --- TOP RIGHT: PRICE & STATS --- */}
       <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
           
+          {/* NEW: Viewer Count Badge */}
+          <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
+              <Eye className="w-3 h-3 text-red-500 animate-pulse" />
+              <span className="text-xs font-mono font-bold text-white tabular-nums">{viewerCount}</span>
+          </div>
+
           <div className={`
               backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative
               ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}
@@ -200,7 +231,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
               </span>
 
               <div className="flex items-center justify-end gap-1 w-full">
-                  {/* Host Manual Arrows (Reused Chevron to prevent crash) */}
+                  {/* Host Manual Arrows */}
                   {isHost && !isAuctionActive && (
                       <div className="flex flex-col gap-0.5 mr-2">
                           <button onClick={() => manualStep(10)} className="text-white hover:text-dibs-neon active:scale-90 bg-white/10 rounded p-0.5">
@@ -223,8 +254,10 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                             disabled={isAuctionActive}
                             step="10"
                             placeholder="0"
+                            // NEW: Dynamic width based on character length
+                            style={{ width: `${Math.max(2, (currentBid?.toString() || "").length + 1)}ch` }}
                             className={`
-                                w-32 bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20
+                                bg-transparent text-right font-display font-black text-4xl outline-none p-0 m-0 placeholder:text-white/20
                                 ${isAuctionActive ? 'text-white' : 'text-white border-b border-dashed border-white/20'}
                             `}
                           />
