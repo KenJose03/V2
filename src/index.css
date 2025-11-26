@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #050505; /* Dibs Black */
+  color: white;
+  margin: 0;
+  font-family: 'Inter', sans-serif; /* Fallback font */
+}
+
+/* Hide scrollbars for that app-like feel */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+.mask-chat {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+}

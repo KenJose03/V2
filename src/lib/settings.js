@@ -1,0 +1,2 @@
+export const AGORA_APP_ID = "4ac521d1134d465b80122c12340392ee"; 
+export const AGORA_TOKEN = "007eJxTYEiw0D+5NmQTi+gWlkOr/cVliv5M6fz2mn3+lRtx79ZfnJ6kwGCSmGxqZJhiaGhskmJiZppkYWBoZJRsaGRsYmBsaZSa+q5CNbMhkJGhxGg9AyMUgvgsDCGuwSEMDABJ0R7g"; 
