@@ -3,14 +3,13 @@ import { getDatabase } from "firebase/database";
 
 // REPLACE THIS WITH YOUR ACTUAL FIREBASE CONFIG
 const firebaseConfig = {
-  apiKey: "AIzaSyDh00RIcMwa-Efyinh1hqKFvh0RctKuLV0",
-  authDomain: "dibs-eb67c.firebaseapp.com",
-  databaseURL: "https://dibs-eb67c-default-rtdb.asia-southeast1.firebasedatabase.app", // <--- CRITICAL
-  projectId: "dibs-eb67c",
-  storageBucket: "dibs-eb67c.firebasestorage.app",
-  messagingSenderId: "981257191424",
-  appId: "1:981257191424:web:3789da5f70129adf44d8e5",
-  measurementId: "G-BSKCMDEF25"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DB_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 

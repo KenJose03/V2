@@ -110,7 +110,7 @@ const LoginScreen = () => {
 
   const handleStart = (role) => {
     if(!roomName) return;
-    navigate(`/room/${roomName}?role=${role}`);
+    navigate(`/login?room=${roomName}&role=${role}`);
   }
 
   return (
