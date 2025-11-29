@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import { useNavigate } from 'react-router-dom';
-import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio } from 'lucide-react';
+import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw } from 'lucide-react';
 import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
 import { InteractionLayer } from './InteractionLayer';
 
@@ -17,32 +17,31 @@ export const LiveRoom = ({ roomId, isHost }) => {
   // UI States
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
+  const [cameras, setCameras] = useState([]);
 
   // Refs
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
+  const isRunning = useRef(false);
 
   useEffect(() => {
+    // Lock to prevent double-execution in Strict Mode
+    if (isRunning.current) return;
+    isRunning.current = true;
+
+    // LOCAL VARIABLES (Prevent Null Crash)
     let myClient = null;
-    let myTracks = { audio: null, video: null };
-    let isActive = true; 
+    let isActive = true;
 
     const initAgora = async () => {
       try {
         setStatus("CONNECTING...");
         
-        // 1. Create Client
+        // 1. CREATE CLIENT
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-        clientRef.current = myClient; // Sync global ref
+        clientRef.current = myClient; // <--- ASSIGNED HERE
 
-        // 2. Set Role
-        if (isHost) {
-          await myClient.setClientRole("host");
-        } else {
-          await myClient.setClientRole("audience", { level: 2 });
-        }
-
-        // 3. Listeners
+        // 2. SETUP LISTENERS
         myClient.on("user-published", async (user, mediaType) => {
           if (!isActive) return;
           await myClient.subscribe(user, mediaType);
@@ -62,24 +61,39 @@ export const LiveRoom = ({ roomId, isHost }) => {
              if (mediaType === 'video') setIsStreaming(false);
         });
 
-        // 4. Join
+        // 3. SETUP HOST/AUDIENCE
+        if (isHost) {
+          await myClient.setClientRole("host");
+          try { setCameras(await AgoraRTC.getCameras()); } catch (e) {}
+        } else {
+          await myClient.setClientRole("audience", { level: 2 });
+        }
+
+        // 4. JOIN
         await myClient.join(AGORA_APP_ID, roomId, AGORA_TOKEN, null);
         if (isActive) setJoined(true);
 
-        // 5. Host Camera Setup
+        // 5. HOST CAMERA
         if (isHost) {
           setStatus("STARTING CAMERA...");
           
-          // Create tracks
-          const [mic, cam] = await AgoraRTC.createMicrophoneAndCameraTracks(
-              { echoCancellation: true, noiseSuppression: true }, 
-              undefined 
-          );
-          
+          // Smart Resolution: Try HD, Fallback to SD
+          let tracks;
+          try {
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+                 { echoCancellation: true, noiseSuppression: true },
+                 { encoderConfig: "720p_1" } 
+             );
+          } catch (e) {
+             console.warn("HD failed, retrying SD...");
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+          }
+
+          const [mic, cam] = tracks;
+
           if (!isActive) { mic.close(); cam.close(); return; }
 
-          myTracks = { audio: mic, video: cam };
-          localTracksRef.current = myTracks; 
+          localTracksRef.current = { audio: mic, video: cam };
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
@@ -99,27 +113,22 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
     initAgora();
 
-    // --- CLEANUP (FIXED RACE CONDITION) ---
+    // CLEANUP
     return () => {
       isActive = false;
+      isRunning.current = false;
       
       const cleanup = async () => {
-          // 1. Close Tracks
-          if (myTracks.audio) { myTracks.audio.close(); }
-          if (myTracks.video) { myTracks.video.close(); }
+          if (localTracksRef.current.audio) localTracksRef.current.audio.close();
+          if (localTracksRef.current.video) localTracksRef.current.video.close();
           localTracksRef.current = { audio: null, video: null };
 
-          // 2. Leave Channel
           if (myClient) {
               await myClient.leave().catch(() => {});
               myClient.removeAllListeners();
           }
-
-          // 3. CRITICAL FIX: Only nullify ref if WE own it
-          // This prevents deleting the new client if React re-rendered fast
-          if (clientRef.current === myClient) {
-              clientRef.current = null;
-          }
+          // FIX: REMOVED THE LINE THAT SETS clientRef.current = null
+          // We let the ref persist to ensure buttons always have a target.
       };
       cleanup();
     };
@@ -127,8 +136,12 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
   // --- TOGGLE STREAMING ---
   const handleToggleStream = async () => {
+      // Debugging Logic
       if (!clientRef.current) {
-          console.error("Client not ready");
+          console.error("CRITICAL: Client Ref is null. Attempting recovery...");
+          // Fallback: If ref is dead but we are here, user is likely seeing video.
+          // We can't recover the client object easily without a restart.
+          alert("Connection State Error. Please refresh the page.");
           return;
       }
 
@@ -156,7 +169,21 @@ export const LiveRoom = ({ roomId, isHost }) => {
       }
   };
 
-  // UI Toggles
+  // --- CAMERA SWITCH ---
+  const switchCamera = async () => {
+      if (!localTracksRef.current.video || cameras.length <= 1) return;
+      try {
+          const currentTrack = localTracksRef.current.video;
+          const currentLabel = currentTrack.getTrackLabel();
+          const currentIndex = cameras.findIndex(c => c.label === currentLabel);
+          const nextIndex = (currentIndex + 1) % cameras.length;
+          const nextDevice = cameras[nextIndex];
+          await currentTrack.setDevice(nextDevice.deviceId);
+      } catch (err) {
+          console.error("Camera switch failed", err);
+      }
+  };
+
   const toggleMic = async () => {
       if (localTracksRef.current.audio) {
           const newState = !isMicOn;
@@ -176,7 +203,8 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
   return (
     <div className="relative w-full h-screen bg-black text-white overflow-hidden">
-      {/* VIDEO LAYER */}
+      
+      {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0">
         <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
         <div id="remote-video-container" className={`w-full h-full ${isHost ? 'hidden' : ''}`}></div>
@@ -196,11 +224,12 @@ export const LiveRoom = ({ roomId, isHost }) => {
         )}
       </div>
 
-      {/* INTERACTION LAYER */}
+      {/* LAYER 2: INTERACTION */}
       <InteractionLayer roomId={roomId} isHost={isHost} />
 
-      {/* SYSTEM CONTROLS */}
+      {/* LAYER 3: SYSTEM CONTROLS */}
       <div className="absolute inset-0 z-50 pointer-events-none p-4 flex flex-col justify-between">
+        
         {/* Header */}
         <div className="flex justify-between items-start pointer-events-auto">
             <div className={`px-2 py-0.5 rounded-sm flex items-center gap-2 ${isStreaming ? 'bg-red-600' : 'bg-neutral-800'}`}>
@@ -208,9 +237,16 @@ export const LiveRoom = ({ roomId, isHost }) => {
                     {isStreaming ? 'LIVE' : 'OFFLINE'}
                 </span>
             </div>
+            
             <div className="flex items-center gap-2">
                  {isHost && (
                      <>
+                        {/* FLIP CAMERA BUTTON */}
+                        {cameras.length > 1 && (
+                            <button onClick={switchCamera} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
+                                <RefreshCw className="w-4 h-4" />
+                            </button>
+                        )}
                         <button onClick={toggleMic} className="bg-black/50 p-2 rounded-full hover:bg-white hover:text-black transition-colors">
                             {isMicOn ? <Mic className="w-4 h-4"/> : <MicOff className="w-4 h-4 text-red-500"/>}
                         </button>
@@ -225,20 +261,18 @@ export const LiveRoom = ({ roomId, isHost }) => {
             </div>
         </div>
 
-        {/* HOST GO LIVE BUTTON */}
+        {/* Host Stream Trigger */}
         {isHost && videoReady && !isStreaming && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto z-50"> 
-                <button 
-                    onClick={handleToggleStream}
-                    className="bg-white text-black px-8 py-4 rounded-full font-black text-sm tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-3"
-                >
-                    <Radio className="w-5 h-5 text-red-600 animate-pulse" />
-                    GO LIVE
-                </button>
-            </div>
+            <button 
+                onClick={handleToggleStream}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-auto bg-white text-black px-8 py-4 rounded-full font-black text-sm tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-3"
+            >
+                <Radio className="w-5 h-5 text-red-600 animate-pulse" />
+                GO LIVE
+            </button>
         )}
 
-        {/* HOST END STREAM BUTTON */}
+        {/* Host End Stream */}
         {isHost && isStreaming && (
              <div className="pointer-events-auto self-center mb-24">
                 <button 
