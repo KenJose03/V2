@@ -1,0 +1,289 @@
+import React, { useEffect, useRef, useState } from 'react';
+import AgoraRTC from 'agora-rtc-sdk-ng';
+import { useNavigate } from 'react-router-dom';
+import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw } from 'lucide-react';
+import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
+import { InteractionLayer } from './InteractionLayer';
+
+export const LiveRoom = ({ roomId, isHost }) => {
+  const navigate = useNavigate();
+  
+  // Connection States
+  const [joined, setJoined] = useState(false);     
+  const [isStreaming, setIsStreaming] = useState(false); 
+  const [videoReady, setVideoReady] = useState(false);   
+  const [status, setStatus] = useState("INITIALIZING...");
+
+  // UI States
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCamOn, setIsCamOn] = useState(true);
+  const [cameras, setCameras] = useState([]);
+
+  // Refs
+  const clientRef = useRef(null);
+  const localTracksRef = useRef({ audio: null, video: null });
+  const isRunning = useRef(false);
+
+  useEffect(() => {
+    // Lock to prevent double-execution in Strict Mode
+    if (isRunning.current) return;
+    isRunning.current = true;
+
+    // LOCAL VARIABLES (Prevent Null Crash)
+    let myClient = null;
+    let isActive = true;
+
+    const initAgora = async () => {
+      try {
+        setStatus("CONNECTING...");
+        
+        // 1. CREATE CLIENT
+        myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        clientRef.current = myClient; // <--- ASSIGNED HERE
+
+        // 2. SETUP LISTENERS
+        myClient.on("user-published", async (user, mediaType) => {
+          if (!isActive) return;
+          await myClient.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            const remoteContainer = document.getElementById("remote-video-container");
+            if (remoteContainer) {
+                remoteContainer.innerHTML = ''; 
+                user.videoTrack.play(remoteContainer);
+                setVideoReady(true);
+                setIsStreaming(true);
+            }
+          }
+          if (mediaType === "audio") user.audioTrack.play();
+        });
+
+        myClient.on("user-unpublished", (user, mediaType) => {
+             if (mediaType === 'video') setIsStreaming(false);
+        });
+
+        // 3. SETUP HOST/AUDIENCE
+        if (isHost) {
+          await myClient.setClientRole("host");
+          try { setCameras(await AgoraRTC.getCameras()); } catch (e) {}
+        } else {
+          await myClient.setClientRole("audience", { level: 2 });
+        }
+
+        // 4. JOIN
+        await myClient.join(AGORA_APP_ID, roomId, AGORA_TOKEN, null);
+        if (isActive) setJoined(true);
+
+        // 5. HOST CAMERA
+        if (isHost) {
+          setStatus("STARTING CAMERA...");
+          
+          // Smart Resolution: Try HD, Fallback to SD
+          let tracks;
+          try {
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+                 { echoCancellation: true, noiseSuppression: true },
+                 { encoderConfig: "720p_1" } 
+             );
+          } catch (e) {
+             console.warn("HD failed, retrying SD...");
+             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+          }
+
+          const [mic, cam] = tracks;
+
+          if (!isActive) { mic.close(); cam.close(); return; }
+
+          localTracksRef.current = { audio: mic, video: cam };
+          
+          const localContainer = document.getElementById("local-video-container");
+          if (localContainer) {
+              cam.play(localContainer);
+              setVideoReady(true);
+              setStatus("READY TO AIR");
+          }
+        } else {
+            setStatus("WAITING FOR HOST...");
+        }
+
+      } catch (error) {
+        console.error("INIT ERROR:", error);
+        if (isActive) setStatus(`ERROR: ${error.message}`);
+      }
+    };
+
+    initAgora();
+
+    // CLEANUP
+    return () => {
+      isActive = false;
+      isRunning.current = false;
+      
+      const cleanup = async () => {
+          if (localTracksRef.current.audio) localTracksRef.current.audio.close();
+          if (localTracksRef.current.video) localTracksRef.current.video.close();
+          localTracksRef.current = { audio: null, video: null };
+
+          if (myClient) {
+              await myClient.leave().catch(() => {});
+              myClient.removeAllListeners();
+          }
+          // FIX: REMOVED THE LINE THAT SETS clientRef.current = null
+          // We let the ref persist to ensure buttons always have a target.
+      };
+      cleanup();
+    };
+  }, [roomId, isHost]);
+
+  // --- TOGGLE STREAMING ---
+  const handleToggleStream = async () => {
+      // Debugging Logic
+      if (!clientRef.current) {
+          console.error("CRITICAL: Client Ref is null. Attempting recovery...");
+          // Fallback: If ref is dead but we are here, user is likely seeing video.
+          // We can't recover the client object easily without a restart.
+          alert("Connection State Error. Please refresh the page.");
+          return;
+      }
+
+      const tracks = [localTracksRef.current.audio, localTracksRef.current.video].filter(Boolean);
+
+      try {
+          if (isStreaming) {
+              setStatus("STOPPING...");
+              await clientRef.current.unpublish(tracks);
+              setIsStreaming(false);
+              setStatus("READY TO AIR");
+          } else {
+              setStatus("PUBLISHING...");
+              // Wake up audio
+              if (localTracksRef.current.audio) {
+                  await localTracksRef.current.audio.setEnabled(true);
+              }
+              await clientRef.current.publish(tracks);
+              setIsStreaming(true);
+              setStatus("LIVE");
+          }
+      } catch (err) {
+          console.error("Toggle Error:", err);
+          setStatus("ERROR: " + err.message);
+      }
+  };
+
+  // --- CAMERA SWITCH ---
+  const switchCamera = async () => {
+      if (!localTracksRef.current.video || cameras.length <= 1) return;
+      try {
+          const currentTrack = localTracksRef.current.video;
+          const currentLabel = currentTrack.getTrackLabel();
+          const currentIndex = cameras.findIndex(c => c.label === currentLabel);
+          const nextIndex = (currentIndex + 1) % cameras.length;
+          const nextDevice = cameras[nextIndex];
+          await currentTrack.setDevice(nextDevice.deviceId);
+      } catch (err) {
+          console.error("Camera switch failed", err);
+      }
+  };
+
+  const toggleMic = async () => {
+      if (localTracksRef.current.audio) {
+          const newState = !isMicOn;
+          await localTracksRef.current.audio.setEnabled(newState);
+          setIsMicOn(newState);
+      }
+  };
+  const toggleCam = async () => {
+      if (localTracksRef.current.video) {
+          const newState = !isCamOn;
+          await localTracksRef.current.video.setEnabled(newState);
+          setIsCamOn(newState);
+      }
+  };
+
+  const isLoading = isHost ? !videoReady : (!joined);
+
+  return (
+    <div className="relative w-full h-screen bg-black text-white overflow-hidden">
+      
+      {/* LAYER 1: VIDEO */}
+      <div className="absolute inset-0 z-0">
+        <div id="local-video-container" className={`w-full h-full ${!isHost ? 'hidden' : ''}`}></div>
+        <div id="remote-video-container" className={`w-full h-full ${isHost ? 'hidden' : ''}`}></div>
+        
+        {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black z-20 flex-col gap-4">
+                <span className="font-mono text-xs animate-pulse text-white">CONNECTING...</span>
+                <span className="font-mono text-[10px] text-white uppercase">{status}</span>
+            </div>
+        )}
+
+        {!isHost && joined && !isStreaming && (
+             <div className="absolute inset-0 flex items-center justify-center bg-black z-10 flex-col gap-4">
+                <span className="font-display font-black text-2xl uppercase text-white">Stream Offline</span>
+                <span className="font-mono text-xs text-white">Waiting for Host to go live...</span>
+             </div>
+        )}
+      </div>
+
+      {/* LAYER 2: INTERACTION */}
+      <InteractionLayer roomId={roomId} isHost={isHost} />
+
+      {/* LAYER 3: SYSTEM CONTROLS */}
+      <div className="absolute inset-0 z-50 pointer-events-none p-4 flex flex-col justify-between">
+        
+        {/* Header */}
+        <div className="flex justify-between items-start pointer-events-auto">
+            <div className={`px-1 py-0.5 rounded-sm flex items-center gap-2 ${isStreaming ? 'bg-white' : 'bg-white/20'}`}>
+                <span className="font-display font-medium text-xs uppercase tracking-widest text-white">
+                    {isStreaming ? 'LIVE' : 'OFFLINE'}
+                </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+                 {isHost && (
+                     <>
+                        {/* FLIP CAMERA BUTTON */}
+                        {cameras.length > 1 && (
+                            <button onClick={switchCamera} className="bg-white/50 p-2 rounded-full hover:bg-white transition-colors">
+                                <RefreshCw className="w-4 h-4 text-white" />
+                            </button>
+                        )}
+                        <button onClick={toggleMic} className="bg-white/50 p-2 rounded-full hover:bg-white transition-colors">
+                            {isMicOn ? <Mic className="w-4 h-4 text-white"/> : <MicOff className="w-4 h-4 text-white"/>}
+                        </button>
+                        <button onClick={toggleCam} className="bg-white/50 p-2 rounded-full hover:bg-white transition-colors">
+                            {isCamOn ? <VideoIcon className="w-4 h-4 text-white"/> : <VideoOff className="w-4 h-4 text-white"/>}
+                        </button>
+                     </>
+                 )}
+                 <button onClick={() => navigate('/')} className="bg-white/50 p-2 rounded-full hover:bg-white transition-colors">
+                    <X className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+
+        {/* Host Stream Trigger */}
+        {isHost && videoReady && !isStreaming && (
+            <button 
+                onClick={handleToggleStream}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-auto bg-white text-[#FF6600] px-8 py-4 rounded-full font-black text-sm tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-3"
+            >
+                <Radio className="w-5 h-5 text-[#FF6600] animate-pulse" />
+                GO LIVE
+            </button>
+        )}
+
+        {/* Host End Stream */}
+        {isHost && isStreaming && (
+             <div className="pointer-events-auto self-center mb-24">
+                <button 
+                    onClick={handleToggleStream}
+                    className="bg-white border border-white text-[#FF6600] px-6 py-2 rounded-full font-bold text-xs tracking-widest uppercase hover:bg-white/90 transition-colors"
+                >
+                    END STREAM
+                </button>
+             </div>
+        )}
+      </div>
+    </div>
+  );
+};

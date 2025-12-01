@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Chunko';
+  src: url('/Chunko-Bold-Demo-BF67b2ec86adebe.otf') format('opentype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+body {
+  background-color: #1a0a00; /* Darker orange background for desktop borders */
+  color: white;
+  margin: 0;
+  font-family: 'Inter', sans-serif; /* Fallback font */
+  overflow: hidden;
+}
+
+/* Mobile-like container for desktop */
+#root {
+  max-width: 430px;
+  margin: 0 auto;
+  height: 100vh;
+  background-color: #FF6600; /* Orange background */
+  position: relative;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+}
+
+/* Hide scrollbars for that app-like feel */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+.mask-chat {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 20%);
+}
