@@ -56,16 +56,33 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
 
-  // --- SYNC LOGIC ---
+  // --- FIX: GET USER ID FROM URL ---
+  // This defines the variable that was missing in your code
+  const searchParams = new URLSearchParams(window.location.search);
+  const persistentUserId = searchParams.get('uid');
+
+  // --- ASSIGN USERNAME (CONSISTENT) ---
   useEffect(() => {
       if (isHost) {
           setUsername("HOST");
       } else {
-          const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
-          setUsername(randomName);
+          if (persistentUserId) {
+              // Deterministic Name: Generate consistent index from ID string
+              let hash = 0;
+              for (let i = 0; i < persistentUserId.length; i++) {
+                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const index = Math.abs(hash) % quirky_usernames.length;
+              setUsername(quirky_usernames[index]);
+          } else {
+              // Fallback if no ID
+              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
+              setUsername(randomName);
+          }
       }
-  }, [isHost]);
+  }, [isHost, persistentUserId]);
 
+  // --- SYNC WITH FIREBASE ---
   useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
@@ -111,16 +128,20 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
+  // --- PRESENCE SYSTEM ---
   useEffect(() => {
       if (!isHost) {
-          const userId = Math.random().toString(36).substring(2, 15);
+          // FIX: Use persistentUserId with fallback logic
+          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
+          
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
           set(myPresenceRef, true);
           onDisconnect(myPresenceRef).remove();
           return () => { remove(myPresenceRef); };
       }
-  }, [roomId, isHost]);
+  }, [roomId, isHost, persistentUserId]);
 
+  // --- COUNTDOWN TIMER ---
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
@@ -135,6 +156,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       return () => clearInterval(interval);
   }, [isAuctionActive, endTime, isHost]);
 
+  // Auto-scroll
   useEffect(() => {
     if (chatEndRef.current) {
         chatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -187,7 +209,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     if (!isAuctionActive) return; 
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
-
+    
     runTransaction(bidRef, (current) => {
       const safeCurrent = current || 0;
       if (customBid > safeCurrent) return customBid;
@@ -213,7 +235,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           "auction/endTime": newEndTime,
           "lastBidder": null
       });
-
       const item = INVENTORY.find(i => i.id === currentItemId);
       push(ref(db, `rooms/${roomId}/chat`), {
         text: `🚨 AUCTION STARTED: ${item ? item.name : 'Item'} at ₹${currentBid}!`,
@@ -241,17 +262,16 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       else startAuction();
   };
 
-  // --- RENDER ---
   return (
-    // INCREASED PADDING BOTTOM to 24 to lift Chat/Bid buttons up
-    <div className="absolute inset-0 z-20 flex flex-col justify-end pb-24 px-4 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
       
-      {/* TOP RIGHT: PRICE & STATS */}
+      {/* TOP RIGHT: STATS */}
       <div className="absolute top-24 right-4 pointer-events-auto flex flex-col items-end gap-2">
           <div className="bg-black/40 backdrop-blur border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 shadow-sm">
               <Eye className="w-3 h-3 text-red-500 animate-pulse" />
               <span className="text-xs font-mono font-bold text-white tabular-nums">{viewerCount}</span>
           </div>
+
           <div className={`backdrop-blur-md border rounded-2xl p-2 flex flex-col items-end shadow-xl min-w-fit px-4 transition-colors relative ${isAuctionActive ? 'bg-red-900/20 border-red-500/30' : 'bg-black/40 border-white/10'}`}>
               <span className="text-[10px] text-zinc-300 font-mono uppercase tracking-wider mb-1 px-1">
                   {isAuctionActive ? "Current Bid" : "Starting Price"}
@@ -282,6 +302,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                   </div>
               </div>
           </div>
+
           {isAuctionActive && (
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${timeLeft <= 10 ? 'bg-red-600 text-white animate-pulse' : 'bg-neutral-800 text-zinc-300 border border-white/10'}`}>
                   <Clock className="w-3 h-3" />
@@ -290,10 +311,69 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           )}
       </div>
 
-      {/* BOTTOM LEFT: ITEM CARD (ABSOLUTELY POSITIONED) */}
-      {/* Positioned below Chat Input? No, instructions said Bottom Left (Green Box). 
-          Given Chat Input is in the flow, this needs to be pinned to bottom-left. 
-          z-40 to stay above chat if overlap occurs. */}
+      {/* CHAT STREAM (Lifted up to make room for controls) */}
+      <div ref={chatContainerRef} className="absolute bottom-44 left-4 w-full max-w-[70%] h-48 overflow-y-auto mask-chat pointer-events-auto pr-2">
+          <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
+            <AnimatePresence initial={false}>
+                {messages.map((msg, i) => (
+                <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`self-start rounded-lg px-3 py-1.5 text-sm backdrop-blur-sm border shadow-sm break-words ${
+                        msg.type === 'bid' 
+                        ? 'bg-dibs-neon/10 border-dibs-neon/50 text-dibs-neon font-bold'
+                        : msg.isHost 
+                            ? 'bg-red-600/20 border-red-500/50 text-red-100' 
+                            : 'bg-black/30 border-white/10 text-white'
+                    }`}
+                >
+                    <span className="font-bold opacity-70 text-[10px] mr-2 block">
+                        {msg.type === 'bid' ? '🔔 UPDATE' : msg.user}
+                    </span>
+                    {msg.text}
+                </motion.div>
+                ))}
+            </AnimatePresence>
+            <div ref={chatEndRef} />
+          </div>
+      </div>
+
+      {/* CONTROLS ROW (Lifted up to bottom-20) */}
+      <div className="absolute bottom-20 left-4 right-4 pointer-events-auto flex items-center gap-2">
+        <form onSubmit={sendMessage} className="flex-1 relative group">
+            <input 
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={`Chat as ${username}...`}
+                className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-mono placeholder:text-white/30"
+            />
+            <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
+                <Send className="w-3 h-3" />
+            </button>
+        </form>
+
+        {!isHost && (
+            <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
+                <div className="flex flex-col gap-0.5 px-1">
+                    <button onClick={handleIncrease} className="text-black hover:text-zinc-500 active:scale-90 transition-transform"><ChevronUp className="w-3 h-3" /></button>
+                    <button onClick={handleDecrease} disabled={customBid <= currentBid + 10} className={`text-black transition-transform ${customBid <= currentBid + 10 ? 'opacity-20' : 'hover:text-zinc-500 active:scale-90'}`}><ChevronDown className="w-3 h-3" /></button>
+                </div>
+                <button onClick={placeBid} className="bg-black text-white h-9 px-4 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-1 hover:bg-zinc-800 active:scale-95 transition-all">
+                    <span>₹{customBid}</span>
+                </button>
+            </div>
+        )}
+
+        {isHost && (
+            <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
+                {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                {isAuctionActive ? "STOP" : "START"}
+            </button>
+        )}
+      </div>
+
+      {/* ITEM CARD (Bottom Left - Below Controls) */}
       <div className="absolute bottom-4 left-4 pointer-events-auto z-40 mb-0">
           <AnimatePresence>
             {showInventory && isHost && (
@@ -349,70 +429,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                   </button>
               )
           )}
-      </div>
-
-      {/* CHAT STREAM */}
-      <div ref={chatContainerRef} className="w-full max-w-[60%] h-48 mb-4 overflow-y-auto mask-chat pointer-events-auto pr-2">
-          <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
-            <AnimatePresence initial={false}>
-                {messages.map((msg, i) => (
-                <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={`self-start rounded-lg px-3 py-1.5 text-sm backdrop-blur-sm border shadow-sm break-words ${
-                        msg.type === 'bid' 
-                        ? 'bg-dibs-neon/10 border-dibs-neon/50 text-dibs-neon font-bold'
-                        : msg.isHost 
-                            ? 'bg-red-600/20 border-red-500/50 text-red-100' 
-                            : 'bg-black/30 border-white/10 text-white'
-                    }`}
-                >
-                    <span className="font-bold opacity-70 text-[10px] mr-2 block">
-                        {msg.type === 'bid' ? '🔔 UPDATE' : msg.user}
-                    </span>
-                    {msg.text}
-                </motion.div>
-                ))}
-            </AnimatePresence>
-            <div ref={chatEndRef} />
-          </div>
-      </div>
-
-      {/* BOTTOM CONTROLS (Lifted UP via parent padding) */}
-      <div className="pointer-events-auto flex items-center gap-2 w-full">
-        <form onSubmit={sendMessage} className="flex-1 relative group">
-            <input 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={`Chat as ${username}...`}
-                className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-mono placeholder:text-white/30"
-            />
-            <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
-                <Send className="w-3 h-3" />
-            </button>
-        </form>
-
-        {/* Viewer Bidding */}
-        {!isHost && (
-            <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
-                <div className="flex flex-col gap-0.5 px-1">
-                    <button onClick={handleIncrease} className="text-black hover:text-zinc-500 active:scale-90 transition-transform"><ChevronUp className="w-3 h-3" /></button>
-                    <button onClick={handleDecrease} disabled={customBid <= currentBid + 10} className={`text-black transition-transform ${customBid <= currentBid + 10 ? 'opacity-20' : 'hover:text-zinc-500 active:scale-90'}`}><ChevronDown className="w-3 h-3" /></button>
-                </div>
-                <button onClick={placeBid} className="bg-black text-white h-9 px-4 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-1 hover:bg-zinc-800 active:scale-95 transition-all">
-                    <span>₹{customBid}</span>
-                </button>
-            </div>
-        )}
-
-        {/* Host Start/Stop Button */}
-        {isHost && (
-            <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
-                {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                {isAuctionActive ? "STOP" : "START"}
-            </button>
-        )}
       </div>
 
     </div>

@@ -29,7 +29,6 @@ export const LiveRoom = ({ roomId, isHost }) => {
     isRunning.current = true;
 
     let myClient = null;
-    let myTracks = { audio: null, video: null };
     let isActive = true;
 
     const initAgora = async () => {
@@ -74,28 +73,37 @@ export const LiveRoom = ({ roomId, isHost }) => {
         // 4. Host Setup
         if (isHost) {
           setStatus("STARTING CAMERA...");
-          let tracks;
+          
+          // FIX: Declare variables in outer scope to avoid ReferenceError
+          let micTrack, camTrack;
+          
           try {
-             tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
+             // Try HD
+             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
                  { encoderConfig: "720p_1" } 
              );
-             myTracks = { audio: mic, video: cam };
+             micTrack = tracks[0];
+             camTrack = tracks[1];
           } catch (e) {
              console.warn("HD failed, retrying SD...");
-             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-             myTracks = { audio: mic, video: cam };
+             // Fallback SD
+             const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+             micTrack = tracks[0];
+             camTrack = tracks[1];
           }
 
-          const [mic, cam] = tracks;
+          if (!isActive) { 
+              micTrack?.close(); 
+              camTrack?.close(); 
+              return; 
+          }
 
-          if (!isActive) { mic.close(); cam.close(); return; }
-
-          localTracksRef.current = { audio: mic, video: cam };
+          localTracksRef.current = { audio: micTrack, video: camTrack }; // SYNC REF
           
           const localContainer = document.getElementById("local-video-container");
           if (localContainer) {
-              cam.play(localContainer);
+              camTrack.play(localContainer);
               setVideoReady(true);
               setStatus("READY TO AIR");
           }
@@ -111,6 +119,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
 
     initAgora();
 
+    // CLEANUP
     return () => {
       isActive = false;
       isRunning.current = false;

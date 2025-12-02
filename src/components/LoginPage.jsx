@@ -9,7 +9,6 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  // Get intended destination from URL
   const roomId = searchParams.get('room');
   const role = searchParams.get('role');
 
@@ -19,14 +18,13 @@ export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
 
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const validatePhone = (phone) => /^\d{10,}$/.test(phone); // At least 10 digits
+  const validatePhone = (phone) => /^\d{10,}$/.test(phone); 
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    // 1. Basic Validation
     if (!validateEmail(email)) {
         setError("Invalid Email Format");
         setLoading(false);
@@ -38,10 +36,9 @@ export const LoginPage = () => {
         return;
     }
 
-    // 2. HOST GATEKEEPING
+    // HOST GATEKEEPING
     if (role === 'host') {
         const allowedHost = import.meta.env.VITE_HOST_EMAIL || "ops@brownietech.in";
-        
         if (email.toLowerCase() !== allowedHost.toLowerCase()) {
             alert("ACCESS DENIED: Unauthorized Host Email");
             navigate('/'); 
@@ -49,11 +46,19 @@ export const LoginPage = () => {
         }
     }
 
-    // 3. GENERATE ID & STORE USER DATA (Lead Generation)
     try {
-        const userId = role === 'host' ? 'HOST' : `USER-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        // --- NEW: PERSISTENT USER ID LOGIC ---
+        let userId;
+        if (role === 'host') {
+            userId = 'HOST';
+        } else {
+            // Create ID from Phone Number (Last 10 digits)
+            // This ensures if they login again with same phone, they get SAME ID.
+            const cleanPhone = phone.replace(/\D/g, '').slice(-10); 
+            userId = `USER-${cleanPhone}`;
+        }
         
-        // Save to Firebase for your records
+        // Save session data
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
             email,
@@ -63,8 +68,9 @@ export const LoginPage = () => {
             joinedAt: Date.now()
         });
 
-        // 4. SUCCESS -> NAVIGATE TO ROOM
-        navigate(`/room/${roomId}?role=${role}`);
+        // --- PASS USERID TO ROOM ---
+        // We add it to the URL so LiveRoom can read it
+        navigate(`/room/${roomId}?role=${role}&uid=${userId}`);
 
     } catch (err) {
         console.error("Login Error:", err);
@@ -73,10 +79,15 @@ export const LoginPage = () => {
     }
   };
 
+  // ... (Render UI remains unchanged) ...
   return (
+    // ... (Use your existing UI code here) ...
+    // Just replace the handleLogin function above inside your existing component
     <div className="w-full h-screen bg-[#FF6600] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      
-      <motion.div 
+      {/* ... keep your existing UI ... */}
+      {/* I am omitting the full UI code to save space, as only handleLogin changed */}
+      {/* Use the full UI from the previous correct merge if you need to copy-paste the whole file */}
+       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-sm space-y-8 z-10"
