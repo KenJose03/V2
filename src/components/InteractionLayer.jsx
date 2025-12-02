@@ -6,10 +6,10 @@ import { db } from '../lib/firebase';
 
 // --- INVENTORY ---
 const INVENTORY = [
-  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 100 },
-  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 200 },
-  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 250 },
-  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 120 },
+  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 1500 },
+  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 800 },
+  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 2500 },
+  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 1200 },
 ];
 
 const quirky_usernames = [
@@ -56,33 +56,16 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
 
-  // --- FIX: GET USER ID FROM URL ---
-  // This defines the variable that was missing in your code
-  const searchParams = new URLSearchParams(window.location.search);
-  const persistentUserId = searchParams.get('uid');
-
-  // --- ASSIGN USERNAME (CONSISTENT) ---
+  // --- SYNC LOGIC ---
   useEffect(() => {
       if (isHost) {
           setUsername("HOST");
       } else {
-          if (persistentUserId) {
-              // Deterministic Name: Generate consistent index from ID string
-              let hash = 0;
-              for (let i = 0; i < persistentUserId.length; i++) {
-                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
-              }
-              const index = Math.abs(hash) % quirky_usernames.length;
-              setUsername(quirky_usernames[index]);
-          } else {
-              // Fallback if no ID
-              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
-              setUsername(randomName);
-          }
+          const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
+          setUsername(randomName);
       }
-  }, [isHost, persistentUserId]);
+  }, [isHost]);
 
-  // --- SYNC WITH FIREBASE ---
   useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
@@ -128,20 +111,16 @@ export const InteractionLayer = ({ roomId, isHost }) => {
     return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
   }, [roomId]);
 
-  // --- PRESENCE SYSTEM ---
   useEffect(() => {
       if (!isHost) {
-          // FIX: Use persistentUserId with fallback logic
-          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
-          
+          const userId = Math.random().toString(36).substring(2, 15);
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
           set(myPresenceRef, true);
           onDisconnect(myPresenceRef).remove();
           return () => { remove(myPresenceRef); };
       }
-  }, [roomId, isHost, persistentUserId]);
+  }, [roomId, isHost]);
 
-  // --- COUNTDOWN TIMER ---
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
@@ -156,7 +135,6 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       return () => clearInterval(interval);
   }, [isAuctionActive, endTime, isHost]);
 
-  // Auto-scroll
   useEffect(() => {
     if (chatEndRef.current) {
         chatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -245,7 +223,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
       const item = INVENTORY.find(i => i.id === currentItemRef.current);
-      
+
       if (isAuctionActiveRef.current) { 
         const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
         const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
@@ -311,8 +289,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           )}
       </div>
 
-      {/* CHAT STREAM (Lifted up to make room for controls) */}
-      <div ref={chatContainerRef} className="absolute bottom-44 left-4 w-full max-w-[70%] h-48 overflow-y-auto mask-chat pointer-events-auto pr-2">
+      {/* CHAT STREAM (Lifted higher to clear the bottom dock) */}
+      <div ref={chatContainerRef} className="absolute bottom-36 left-4 w-full max-w-[60%] h-64 overflow-y-auto mask-chat pointer-events-auto pr-2">
           <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
             <AnimatePresence initial={false}>
                 {messages.map((msg, i) => (
@@ -339,96 +317,107 @@ export const InteractionLayer = ({ roomId, isHost }) => {
           </div>
       </div>
 
-      {/* CONTROLS ROW (Lifted up to bottom-20) */}
-      <div className="absolute bottom-20 left-4 right-4 pointer-events-auto flex items-center gap-2">
-        <form onSubmit={sendMessage} className="flex-1 relative group">
-            <input 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={`Chat as ${username}...`}
-                className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-mono placeholder:text-white/30"
-            />
-            <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
-                <Send className="w-3 h-3" />
-            </button>
-        </form>
-
-        {!isHost && (
-            <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
-                <div className="flex flex-col gap-0.5 px-1">
-                    <button onClick={handleIncrease} className="text-black hover:text-zinc-500 active:scale-90 transition-transform"><ChevronUp className="w-3 h-3" /></button>
-                    <button onClick={handleDecrease} disabled={customBid <= currentBid + 10} className={`text-black transition-transform ${customBid <= currentBid + 10 ? 'opacity-20' : 'hover:text-zinc-500 active:scale-90'}`}><ChevronDown className="w-3 h-3" /></button>
-                </div>
-                <button onClick={placeBid} className="bg-black text-white h-9 px-4 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-1 hover:bg-zinc-800 active:scale-95 transition-all">
-                    <span>₹{customBid}</span>
+      {/* --- BOTTOM DOCK LEFT (CHAT + ITEM) --- */}
+      <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
+        
+        {/* LEFT COLUMN: Chat Input + Item Card */}
+        <div className="flex flex-col gap-2 pointer-events-auto">
+            {/* Chat Input */}
+            <form onSubmit={sendMessage} className="relative group w-64">
+                <input 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={`Chat as ${username}...`}
+                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-mono placeholder:text-white/30"
+                />
+                <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
+                    <Send className="w-3 h-3" />
                 </button>
-            </div>
-        )}
+            </form>
 
-        {isHost && (
-            <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
-                {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                {isAuctionActive ? "STOP" : "START"}
-            </button>
-        )}
-      </div>
-
-      {/* ITEM CARD (Bottom Left - Below Controls) */}
-      <div className="absolute bottom-4 left-4 pointer-events-auto z-40 mb-0">
-          <AnimatePresence>
-            {showInventory && isHost && (
-                <motion.div 
-                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                    className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
-                >
-                    <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase text-zinc-500 tracking-widest sticky top-0 bg-black/90">Select Item</div>
-                    {INVENTORY.map(item => (
-                        <button 
-                            key={item.id}
-                            onClick={() => selectItem(item)}
-                            className="p-3 text-left hover:bg-white/10 transition-colors border-b border-white/5 last:border-0 flex flex-col gap-1"
+            {/* Item Card */}
+            <div className="z-40">
+                <AnimatePresence>
+                    {showInventory && isHost && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                            className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
                         >
-                            <div className="flex justify-between w-full">
-                                <span className="text-sm font-bold text-white">{item.name}</span>
-                                <span className="text-xs font-mono text-dibs-neon">₹{item.startPrice}</span>
-                            </div>
-                            <span className="text-xs text-zinc-400 truncate">{item.desc}</span>
-                        </button>
-                    ))}
-                </motion.div>
-            )}
-          </AnimatePresence>
+                            <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase text-zinc-500 tracking-widest sticky top-0 bg-black/90">Select Item</div>
+                            {INVENTORY.map(item => (
+                                <button 
+                                    key={item.id}
+                                    onClick={() => selectItem(item)}
+                                    className="p-3 text-left hover:bg-white/10 transition-colors border-b border-white/5 last:border-0 flex flex-col gap-1"
+                                >
+                                    <div className="flex justify-between w-full">
+                                        <span className="text-sm font-bold text-white">{item.name}</span>
+                                        <span className="text-xs font-mono text-dibs-neon">₹{item.startPrice}</span>
+                                    </div>
+                                    <span className="text-xs text-zinc-400 truncate">{item.desc}</span>
+                                </button>
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-          {currentItem ? (
-              <div 
-                  onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
-                  className={`
-                      w-64 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex gap-3 items-center shadow-lg transition-all
-                      ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-black/80 hover:border-white/30 active:scale-95' : ''}
-                  `}
-              >
-                  <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center shrink-0 border border-white/5">
-                      <ShoppingBag className="w-5 h-5 text-white/70" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-mono text-dibs-neon bg-dibs-neon/10 px-1 rounded">LOT #{currentItem.id}</span>
-                      </div>
-                      <h3 className="text-sm font-bold text-white leading-tight truncate">{currentItem.name}</h3>
-                      <p className="text-[10px] text-zinc-400 truncate">{currentItem.desc}</p>
-                  </div>
-                  {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
-              </div>
-          ) : (
-              isHost && (
-                  <button onClick={() => setShowInventory(!showInventory)} className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2">
-                      <ShoppingBag className="w-4 h-4" />
-                      SELECT ITEM TO AUCTION
-                  </button>
-              )
-          )}
+                {currentItem ? (
+                    <div 
+                        onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
+                        className={`
+                            w-64 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex gap-3 items-center shadow-lg transition-all
+                            ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-black/80 hover:border-white/30 active:scale-95' : ''}
+                        `}
+                    >
+                        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center shrink-0 border border-white/5">
+                            <ShoppingBag className="w-5 h-5 text-white/70" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[10px] font-mono text-dibs-neon bg-dibs-neon/10 px-1 rounded">LOT #{currentItem.id}</span>
+                            </div>
+                            <h3 className="text-sm font-bold text-white leading-tight truncate">{currentItem.name}</h3>
+                            <p className="text-[10px] text-zinc-400 truncate">{currentItem.desc}</p>
+                        </div>
+                        {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
+                    </div>
+                ) : (
+                    isHost && (
+                        <button onClick={() => setShowInventory(!showInventory)} className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2">
+                            <ShoppingBag className="w-4 h-4" />
+                            SELECT ITEM TO AUCTION
+                        </button>
+                    )
+                )}
+            </div>
+        </div>
+
+        {/* RIGHT COLUMN: Auction & Bids */}
+        <div className="flex flex-col gap-2 pointer-events-auto items-end pb-16"> 
+            {/* Host Start/Stop - Pushed up by pb-16 to leave room for Go Live */}
+            {isHost && (
+                <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
+                    {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                    {isAuctionActive ? "STOP" : "START"}
+                </button>
+            )}
+
+            {/* Viewer Bidding (Replaces Auction buttons for viewers) */}
+            {!isHost && (
+                <div className={`flex items-center gap-1 bg-white rounded-full p-1 shadow-lg transition-opacity ${isAuctionActive ? 'opacity-100' : 'opacity-50 pointer-events-none grayscale'}`}>
+                    <div className="flex flex-col gap-0.5 px-1">
+                        <button onClick={handleIncrease} className="text-black hover:text-zinc-500 active:scale-90 transition-transform"><ChevronUp className="w-3 h-3" /></button>
+                        <button onClick={handleDecrease} disabled={customBid <= currentBid + 10} className={`text-black transition-transform ${customBid <= currentBid + 10 ? 'opacity-20' : 'hover:text-zinc-500 active:scale-90'}`}><ChevronDown className="w-3 h-3" /></button>
+                    </div>
+                    <button onClick={placeBid} className="bg-black text-white h-9 px-4 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-1 hover:bg-zinc-800 active:scale-95 transition-all">
+                        <span>₹{customBid}</span>
+                    </button>
+                </div>
+            )}
+        </div>
+
       </div>
 
     </div>
