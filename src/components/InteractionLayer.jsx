@@ -56,19 +56,32 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
 
-  // --- FIX: GET USER ID FROM URL ---
+  // For enforcing bans/kicks
+  const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false });
   const searchParams = new URLSearchParams(window.location.search);
+  const persistentDbKey = searchParams.get('dbKey');
   const persistentUserId = searchParams.get('uid');
 
-  // --- SYNC LOGIC ---
+  // --- SYNC LOGIC (With Consistent Hashing) ---
   useEffect(() => {
       if (isHost) {
           setUsername("HOST");
       } else {
-          const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
-          setUsername(randomName);
+          if (persistentUserId) {
+              // Deterministic Name: Generate consistent index from ID string
+              let hash = 0;
+              for (let i = 0; i < persistentUserId.length; i++) {
+                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const index = Math.abs(hash) % quirky_usernames.length;
+              setUsername(quirky_usernames[index]);
+          } else {
+              // Fallback random
+              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
+              setUsername(randomName);
+          }
       }
-  }, [isHost]);
+  }, [isHost, persistentUserId]);
 
   useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
@@ -147,9 +160,33 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
   const currentItem = INVENTORY.find(i => i.id === currentItemId);
 
+  // --- LISTEN FOR MODERATOR ACTIONS ---
+  useEffect(() => {
+      if (!persistentDbKey) return;
+      
+      const restrictionsRef = ref(db, `audience_data/${roomId}/${persistentDbKey}/restrictions`);
+      const unsub = onValue(restrictionsRef, (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+              setRestrictions(data);
+              // Immediate Kick Action
+              if (data.isKicked) {
+                  alert("You have been kicked by the moderator.");
+                  window.location.href = '/'; 
+              }
+          }
+      });
+      return () => unsub();
+  }, [roomId, persistentDbKey]);
+
   // --- ACTIONS ---
   const sendMessage = (e) => {
     e.preventDefault();
+    // 1. Check restriction
+    if (restrictions.isMuted) {
+        alert("You are muted by the moderator.");
+        return;
+    }
     if (!input.trim()) return;
     push(ref(db, `rooms/${roomId}/chat`), {
       user: username,
@@ -189,6 +226,11 @@ export const InteractionLayer = ({ roomId, isHost }) => {
 
   const placeBid = () => {
     if (!isAuctionActive) return; 
+    // 1. Check restriction
+    if (restrictions.isBidBanned) {
+        alert("You are banned from bidding.");
+        return;
+    }
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const lastBidderRef = ref(db, `rooms/${roomId}/lastBidder`);
     
@@ -197,7 +239,16 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       if (customBid > safeCurrent) return customBid;
       return;
     }).then((result) => {
-        if (result.committed) set(lastBidderRef, username);
+        if (result.committed) {
+            set(lastBidderRef, username);
+
+            // 2. NEW: Log bid for Moderator History
+            push(ref(db, `rooms/${roomId}/currentAuctionBids`), {
+                user: username,
+                amount: customBid,
+                timestamp: Date.now()
+            });
+        }
     });
 
     push(ref(db, `rooms/${roomId}/chat`), {
@@ -227,16 +278,35 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
       const item = INVENTORY.find(i => i.id === currentItemRef.current);
-
+      // 1. Fetch Winner
+      const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
+      const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
       if (isAuctionActiveRef.current) { 
-        const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
-        const winnerName = snapshot.exists() ? snapshot.val() : "Nobody";
+        // 2. NEW: Fetch session bids to calculate Top 3 for Moderator
+        const bidsSnap = await get(ref(db, `rooms/${roomId}/currentAuctionBids`));
+        let top3 = [];
+        if (bidsSnap.exists()) {
+            const bids = Object.values(bidsSnap.val());
+            top3 = bids.sort((a, b) => b.amount - a.amount).slice(0, 3);
+        }
+
+        // 3. NEW: Push to History
+        push(ref(db, `rooms/${roomId}/auctionHistory`), {
+            itemName: item ? item.name : 'Unknown Item',
+            finalPrice: finalPrice,
+            winner: winnerName,
+            topBidders: top3,
+            timestamp: Date.now()
+        });
+        
         push(ref(db, `rooms/${roomId}/chat`), {
             text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
             type: 'bid'
         });
       }
+      // 4. Cleanup
       update(ref(db, `rooms/${roomId}`), { "auction/isActive": false, "auction/endTime": 0 });
+      remove(ref(db, `rooms/${roomId}/currentAuctionBids`)); // Clear temp bids
   };
 
   const toggleAuction = () => {

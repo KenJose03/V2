@@ -35,42 +35,51 @@ export const LoginPage = () => {
         setLoading(false);
         return;
     }
-
+    const allowedHost = import.meta.env.VITE_HOST_EMAIL;
+    const allowedModerator = import.meta.env.VITE_MODERATOR_EMAIL;
+    let finalRole = role; // Default to current selection (e.g., 'audience')
+    let userId;
     // HOST GATEKEEPING
     if (role === 'host') {
-        const allowedHost = import.meta.env.VITE_HOST_EMAIL || "ops@brownietech.in";
-        if (email.toLowerCase() !== allowedHost.toLowerCase()) {
+        const inputEmail = email.toLowerCase();
+        if (inputEmail === allowedHost.toLowerCase()) {
+            // It is the Host
+            finalRole = 'host';
+            userId = 'HOST';
+        } 
+        else if (inputEmail === allowedModerator.toLowerCase()) {
+            // It is the Moderator -> Switch Role
+            finalRole = 'moderator';
+            userId = 'MODERATOR';
+        }
+
+        else {
             alert("ACCESS DENIED: Unauthorized Host Email");
-            navigate('/'); 
+            setLoading(false); 
             return;
         }
     }
-
-    try {
-        // --- NEW: PERSISTENT USER ID LOGIC ---
-        let userId;
-        if (role === 'host') {
-            userId = 'HOST';
-        } else {
+    else {
             // Create ID from Phone Number (Last 10 digits)
             // This ensures if they login again with same phone, they get SAME ID.
             const cleanPhone = phone.replace(/\D/g, '').slice(-10); 
             userId = `USER-${cleanPhone}`;
-        }
-        
-        // Save session data
+    }
+    try {
+        // Save session data to Firebase (So Moderator can see this user in the list)
+        // We capture the database key (userRef.key) to allow banning/kicking later
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
             email,
             phone,
-            role,
+            role: finalRole,
             userId,
-            joinedAt: Date.now()
+            joinedAt: Date.now(),
+            restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
         });
 
-        // --- PASS USERID TO ROOM ---
-        // We add it to the URL so LiveRoom can read it
-        navigate(`/room/${roomId}?role=${role}&uid=${userId}`);
+        // Navigate with the determined role and IDs
+        navigate(`/room/${roomId}?role=${finalRole}&uid=${userId}&dbKey=${userRef.key}`);
 
     } catch (err) {
         console.error("Login Error:", err);
