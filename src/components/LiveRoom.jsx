@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AgoraRTC from 'agora-rtc-sdk-ng';
-import { useNavigate } from 'react-router-dom';
-import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw, Shield } from 'lucide-react';
 import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
 import { InteractionLayer } from './InteractionLayer';
+import { ModeratorPanel } from './ModeratorPanel';
 
 export const LiveRoom = ({ roomId, isHost }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const userRole = searchParams.get('role');
   
   // Connection States
   const [joined, setJoined] = useState(false);     
@@ -18,6 +21,7 @@ export const LiveRoom = ({ roomId, isHost }) => {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [cameras, setCameras] = useState([]);
+  const [showModPanel, setShowModPanel] = useState(false);
 
   // Refs
   const clientRef = useRef(null);
@@ -242,6 +246,16 @@ export const LiveRoom = ({ roomId, isHost }) => {
             </div>
             
             <div className="flex items-center gap-2">
+                 {/* MODERATOR TOGGLE BUTTON */}
+                 {userRole === 'moderator' && (
+                     <button 
+                        onClick={() => setShowModPanel(!showModPanel)} 
+                        className={`p-2 rounded-full transition-colors ${showModPanel ? 'bg-white text-black' : 'bg-black/50 text-white hover:bg-white hover:text-black'}`}
+                        title="Toggle Mod Panel"
+                     >
+                        <Shield className="w-4 h-4" />
+                     </button>
+                 )}
                  {isHost && (
                      <>
                         {cameras.length > 1 && (
@@ -283,6 +297,10 @@ export const LiveRoom = ({ roomId, isHost }) => {
                     </button>
                 )}
             </>
+        )}
+        {/* MODERATOR OVERLAY */}
+        {userRole === 'moderator' && (
+          <ModeratorPanel roomId={roomId} onClose={() => setShowModPanel(false)} />
         )}
       </div>
     </div>
