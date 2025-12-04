@@ -4,6 +4,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Lock, Phone, Mail, AlertCircle } from 'lucide-react';
 import { ref, push, set } from 'firebase/database';
 import { db } from '../lib/firebase';
+import Papa from 'papaparse';
+import guestListRaw from '../guests.csv?raw'; // Importing with ?raw gives us the text content
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -60,10 +62,39 @@ export const LoginPage = () => {
         }
     }
     else {
-            // Create ID from Phone Number (Last 10 digits)
-            // This ensures if they login again with same phone, they get SAME ID.
-            const cleanPhone = phone.replace(/\D/g, '').slice(-10); 
-            userId = `USER-${cleanPhone}`;
+            // --- NEW CSV VERIFICATION LOGIC ---
+        // Parse the CSV data
+        const results = Papa.parse(guestListRaw, { header: true, skipEmptyLines: true });
+        const guestList = results.data;
+
+        // Normalize Input Data
+        const inputPhoneClean = phone.replace(/\D/g, ''); // Remove non-digits
+        const inputEmailClean = email.trim().toLowerCase();
+
+        // Check for match
+        const isRegistered = guestList.some(guest => {
+            // Get guest details from CSV columns (headers must match CSV exactly)
+            const guestEmail = (guest.email || '').trim().toLowerCase();
+            const guestPhoneRaw = (guest.phone_number || '').toString();
+            const guestPhoneClean = guestPhoneRaw.replace(/\D/g, '');
+
+            // We check if the input phone matches the guest phone (handling potential +91 prefixes)
+            // We verify if the cleaned CSV phone *ends with* the input phone (last 10 digits usually)
+            const phoneMatch = guestPhoneClean.endsWith(inputPhoneClean) || inputPhoneClean.endsWith(guestPhoneClean);
+            const emailMatch = guestEmail === inputEmailClean;
+
+            return phoneMatch && emailMatch;
+        });
+
+        if (!isRegistered) {
+            setError("You haven't registered. Please contact support.");
+            setLoading(false);
+            return;
+        }
+        // ----------------------------------
+
+        const cleanPhone = phone.replace(/\D/g, '').slice(-10); 
+        userId = `USER-${cleanPhone}`;
     }
     try {
         // Save session data to Firebase (So Moderator can see this user in the list)
