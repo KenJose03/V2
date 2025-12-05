@@ -496,7 +496,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
             <div className="flex flex-col gap-2 pointer-events-auto items-end w-[40%] max-w-[10rem]"> 
             {/* Host Start/Stop - Pushed up by pb-16 to leave room for Go Live */}
             {isHost && (
-                <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
+                <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg mb-24 ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
                     {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
                     {isAuctionActive ? "STOP" : "START"}
                 </button>
@@ -515,7 +515,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                                 onClick={handleDecrease} 
                                 // CHANGE: Disable if auction inactive OR min bid reached
                                 disabled={!isAuctionActive || customBid <= currentBid + 10}
-                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + 10) ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${(!isAuctionActive || customBid <= currentBid + 10) ? 'cursor-not-allowed' : ''}`}
                             >
                                 <Minus className="w-8 h-8" />
                             </button>
@@ -524,7 +524,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                                 onClick={handleIncrease} 
                                 // CHANGE: Disable if auction inactive
                                 disabled={!isAuctionActive}
-                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                className={`text-white hover:text-zinc-300 active:scale-90 transition-all p-2 ${!isAuctionActive ? 'cursor-not-allowed' : ''}`}
                             >
                                 <Plus className="w-8 h-8" />
                             </button>
@@ -533,12 +533,13 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                         {/* Bottom: Orange Bid Button (Inside the container) */}
                         <button 
                             onClick={placeBid} 
-                            // CHANGE: Button is disabled when auction is not active
                             disabled={!isAuctionActive}
                             className={`
-                                w-full py-4 rounded-[2rem] font-black text-3xl tracking-tighter transition-all flex items-center justify-center
+                                w-full py-4 rounded-[2rem] font-black tracking-tighter transition-all flex items-center justify-center
+                                text-2xl sm:text-3xl
+                                bg-[#FF6600] text-white
                                 ${isAuctionActive 
-                                    ? 'bg-[#FF6600] text-white active:scale-95 hover:bg-[#ff8533] cursor-pointer' // ACTIVE STATE
+                                    ? 'active:scale-95 hover:bg-[#ff8533] cursor-pointer' 
                                     : 'bg-zinc-800 text-zinc-600 cursor-not-allowed' // INACTIVE STATE (Greyed out)
                                 }
                             `}
