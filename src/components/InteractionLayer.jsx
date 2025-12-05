@@ -366,11 +366,13 @@ export const InteractionLayer = ({ roomId, isHost }) => {
               </motion.div>
           )}
       </div>
-
+    
+    <div className="absolute inset-x-0 bottom-0 p-4 flex flex-col justify-end z-30 pointer-events-none h-[85%]">
+ 
       {/* CHAT STREAM (Lifted higher to clear the bottom dock) */}
       <div 
         ref={chatContainerRef} 
-        className="absolute bottom-60 left-4 w-full max-w-[60%] h-64 overflow-y-auto pointer-events-auto pr-2"
+        className="w-[55%] max-w-[14rem] h-64 overflow-y-auto pointer-events-auto pr-2 mb-2"
         style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)' }}
       >
           <div className="min-h-full flex flex-col justify-end gap-2 pb-2">
@@ -380,7 +382,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                     key={i}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className={`self-start w-48 rounded-[24px] px-4 py-2 shadow-sm break-words font-display ${
+                    className={`self-start w-full rounded-[24px] px-4 py-2 shadow-sm break-words font-display ${
                         msg.type === 'bid' 
                         ? 'bg-[#ff6500] border border-white/20 text-white font-bold'
                         : msg.type === 'auction'
@@ -408,17 +410,17 @@ export const InteractionLayer = ({ roomId, isHost }) => {
       </div>
 
       {/* --- BOTTOM DOCK LEFT (CHAT + ITEM) --- */}
-      <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end">
+      <div className="flex justify-between items-end w-full pointer-events-none">
         
         {/* LEFT COLUMN: Chat Input + Item Card */}
-        <div className="flex flex-col gap-2 pointer-events-auto pb-16">
+        <div className="flex flex-col gap-2 pointer-events-auto w-[55%] max-w-[14rem]">
             {/* Chat Input */}
-            <form onSubmit={sendMessage} className="relative group w-48 mb-2">
+            <form onSubmit={sendMessage} className="relative group w-full mb-2">
                 <input 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={`Chat as ${username}...`}
-                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-sm text-white focus:outline-none focus:border-white/60 transition-all font-display placeholder:text-white/30"
+                        className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-xs sm:text-sm text-white focus:outline-none focus:border-white/60 transition-all font-display placeholder:text-white/30"
                 />
                 <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
                     <Send className="w-3 h-3" />
@@ -434,7 +436,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                             initial={{ opacity: 0, y: 20, scale: 0.9 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                            className="absolute bottom-full mb-2 left-0 w-48 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
+                            className="absolute bottom-full mb-2 left-0 w-full bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto"
                         >
                             <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase text-zinc-500 tracking-widest sticky top-0 bg-black/90">Select Item</div>
                             {INVENTORY.map(item => (
@@ -463,9 +465,9 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                         // - p-4 (more padding)
                         // - w-64 (fixed width)
                         className={`
-                            w-48 bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/5
-                            ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all' : ''}
-                        `}
+                                w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/5
+                                ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all' : ''}
+                            `}
                     >
                         {/* Top Label: ITEM #1 */}
                         <div className="flex items-center justify-between">
@@ -491,7 +493,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
         </div>
 
         {/* RIGHT COLUMN: Auction & Bids */}
-        <div className="flex flex-col gap-2 pointer-events-auto items-end pb-16"> 
+            <div className="flex flex-col gap-2 pointer-events-auto items-end w-[40%] max-w-[10rem]"> 
             {/* Host Start/Stop - Pushed up by pb-16 to leave room for Go Live */}
             {isHost && (
                 <button onClick={toggleAuction} className={`h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}>
@@ -505,7 +507,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                 <div className={`flex flex-col items-center gap-2 transition-all duration-300 ${isAuctionActive ? 'opacity-100' : 'opacity-100'}`}>
                     
                     {/* CHANGE: Grouped Controls into one Black Container */}
-                    <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-40 mb-4">
+                    <div className="bg-black rounded-[2.5rem] p-2 shadow-2xl border border-white/10 w-full mb-4">
                         
                         {/* Top Row: Minus and Plus Buttons */}
                         <div className="flex items-center justify-between px-2 py-2">
@@ -549,7 +551,8 @@ export const InteractionLayer = ({ roomId, isHost }) => {
         </div>
 
       </div>
-
+    </div>       
+    
     </div>
   );
 };
