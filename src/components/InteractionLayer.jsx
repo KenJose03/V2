@@ -169,6 +169,26 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
       }
   }, [isHost, isModerator, persistentUserId]); // Added isModerator to dependencies
 
+  // --- PRESENCE SYSTEM ---
+  useEffect(() => {
+      if (!isHost) {
+          // Use the persistent ID from URL (or fallback to random if missing)
+          const userId = persistentUserId || Math.random().toString(36).substring(2, 15);
+          
+          // Reference to this specific user in the viewers list
+          const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${userId}`);
+          
+          // 1. Add self to list
+          set(myPresenceRef, true);
+          
+          // 2. Setup auto-remove on disconnect (closing tab/internet loss)
+          onDisconnect(myPresenceRef).remove();
+          
+          // 3. Cleanup on component unmount
+          return () => { remove(myPresenceRef); };
+      }
+  }, [roomId, isHost, persistentUserId]);
+
   useEffect(() => {
       if (!isAuctionActive || !endTime) {
           setTimeLeft(30);
