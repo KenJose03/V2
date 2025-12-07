@@ -3,14 +3,26 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus } from 'lucide-react';
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
+import Papa from 'papaparse'; // Import Parser
+import inventoryRaw from '../inventory.csv?raw';
 
 // --- INVENTORY ---
-const INVENTORY = [
-  { id: 101, name: "Vintage Levi's 501", desc: "Size 32, Light Wash, 90s", startPrice: 150 },
-  { id: 102, name: "Nike Windbreaker", desc: "Size L, Teal/Purple, Mint", startPrice: 80 },
-  { id: 103, name: "Carhartt Detroit", desc: "Size XL, Distressed, Tan", startPrice: 250 },
-  { id: 104, name: "Band Tee (Nirvana)", desc: "Size M, Faded Black", startPrice: 120 },
-];
+// --- PARSE INVENTORY FROM CSV ---
+const parseInventory = () => {
+    const results = Papa.parse(inventoryRaw, { 
+        header: true, 
+        skipEmptyLines: true 
+    });
+    
+    return results.data.map(item => ({
+        id: item['Sl NO'] ? parseInt(item['Sl NO']) : 0, // Map 'Sl NO' to 'id'
+        name: item['Name'] || "Unknown Item",             // Map 'Name' to 'name'
+        desc: item['Description'] || "",                  // Map 'Description' to 'desc'
+        startPrice: item['Price'] ? parseInt(item['Price'].replace(/[^0-9]/g, '')) : 0 // Clean & Map 'Price'
+    })).filter(i => i.id !== 0); // Remove invalid rows
+};
+
+const INVENTORY = parseInventory();
 
 const quirky_usernames = [
     "Thrift_Shift", "Holy_Shift_Dress", "Thrifty_Cent", "Fit_Check_Mate", "Pop_The_Tags",
@@ -56,6 +68,7 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   const currentBidRef = useRef(0); 
   const currentItemRef = useRef(null); 
   const stopTriggeredRef = useRef(false);
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   // For enforcing bans/kicks
   const [restrictions, setRestrictions] = useState({ isMuted: false, isBidBanned: false });
@@ -174,6 +187,11 @@ export const InteractionLayer = ({ roomId, isHost }) => {
   }, [messages]);
 
   const currentItem = INVENTORY.find(i => i.id === currentItemId);
+
+  // Reset expansion when item changes
+  useEffect(() => {
+      setIsDescExpanded(false);
+  }, [currentItemId]);
 
   // --- LISTEN FOR MODERATOR ACTIONS ---
   useEffect(() => {
@@ -501,8 +519,20 @@ export const InteractionLayer = ({ roomId, isHost }) => {
                         {/* Item Name */}
                         <h3 className="text-lg font-bold text-white leading-tight truncate mt-0.5">{currentItem.name}</h3>
                         
-                        {/* Item Description / Size */}
-                        <p className="text-xs text-zinc-400 truncate">{currentItem.desc}</p>
+                        {/* Expandable Description */}
+                    <div 
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent Host from opening inventory list
+                            setIsDescExpanded(!isDescExpanded);
+                        }}
+                        className={`text-xs text-zinc-400 cursor-pointer transition-all duration-300 ${isDescExpanded ? 'whitespace-normal break-words' : 'truncate'}`}
+                    >
+                        {currentItem.desc}
+                        {/* Optional: Tiny indicator if collapsed */}
+                        {!isDescExpanded && currentItem.desc.length > 30 && (
+                            <span className="text-[10px] text-[#FF6600] ml-1 font-bold opacity-80">more</span>
+                        )}
+                    </div>
                     </div>
                 ) : (
                     isHost && (
