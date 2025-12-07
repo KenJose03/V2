@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Lock, Phone, Mail, AlertCircle } from 'lucide-react';
+import { ArrowRight, Lock, Phone, Mail, AlertCircle, Key } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 
@@ -14,6 +14,7 @@ export const LoginPage = () => {
 
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,86 +26,93 @@ export const LoginPage = () => {
     setError("");
     setLoading(true);
 
-    if (!validateEmail(email)) {
-        setError("Invalid Email Format");
-        setLoading(false);
-        return;
+    // 1. Common Validation
+    if (!validateEmail(email)) { 
+        setError("Invalid Email Format"); 
+        setLoading(false); 
+        return; 
     }
-    if (!validatePhone(phone)) {
-        setError("Invalid Phone Number (Min 10 digits)");
-        setLoading(false);
-        return;
-    }
-    const allowedHost = import.meta.env.VITE_HOST_EMAIL;
-    const allowedModerator = import.meta.env.VITE_MODERATOR_EMAIL;
-    let finalRole = role; // Default to current selection (e.g., 'audience')
+
+    // Define Credentials
+    const HOST_EMAIL = import.meta.env.VITE_HOST_EMAIL || "ops@brownietech.in";
+    const HOST_PWD = import.meta.env.VITE_HOST_PWD || "admin123"; // Default fallback
+    
+    const MOD_EMAIL = import.meta.env.VITE_MODERATOR_EMAIL || "mod@brownietech.in";
+    const MOD_PWD = import.meta.env.VITE_MODERATOR_PWD || "mod123"; // Default fallback
+
+    let finalRole = role; 
     let userId;
-    // HOST GATEKEEPING
+    let userPhone = phone; // Store phone for audience, empty for host
+
+    // ---------------------------------------------
+    // OPTION A: HOST / MODERATOR LOGIN (Email + Pwd)
+    // ---------------------------------------------
     if (role === 'host') {
-        const inputEmail = email.toLowerCase();
-        if (inputEmail === allowedHost.toLowerCase()) {
-            // It is the Host
-            finalRole = 'host';
-            userId = 'HOST';
-        } 
-        else if (inputEmail === allowedModerator.toLowerCase()) {
-            // It is the Moderator -> Switch Role
-            finalRole = 'moderator';
-            userId = 'MODERATOR';
+        if (!password) {
+            setError("Password is required.");
+            setLoading(false); return;
         }
 
-        else {
-            alert("ACCESS DENIED: Unauthorized Host Email");
-            setLoading(false); 
-            return;
-        }
-    }
-    // AUDIENCE CHECK (Secure Direct Database Lookup)
-    else {
-        // 1. Clean input to match DB format (Last 10 digits)
-        const cleanInputPhone = phone.replace(/\D/g, '').slice(-10);
+        const inputEmail = email.toLowerCase();
         
-        // 2. Direct lookup: Check if this specific phone number exists as a key
+        // Check Host Credentials
+        if (inputEmail === HOST_EMAIL.toLowerCase() && password === HOST_PWD) {
+            finalRole = 'host';
+            userId = 'HOST';
+            userPhone = "N/A"; // No phone needed
+        } 
+        // Check Moderator Credentials
+        else if (inputEmail === MOD_EMAIL.toLowerCase() && password === MOD_PWD) {
+            finalRole = 'moderator';
+            userId = 'MODERATOR';
+            userPhone = "N/A"; // No phone needed
+        } 
+        else {
+            setError("Invalid Email or Password.");
+            setLoading(false); return;
+        }
+    } 
+    // ---------------------------------------------
+    // OPTION B: AUDIENCE LOGIN (Phone Verification)
+    // ---------------------------------------------
+    else {
+        if (!validatePhone(phone)) { 
+            setError("Invalid Phone Number"); 
+            setLoading(false); return; 
+        }
+
+        const cleanInputPhone = phone.replace(/\D/g, '').slice(-10);
         const guestRef = ref(db, `allowed_guests/${cleanInputPhone}`);
         const snapshot = await get(guestRef);
 
         if (!snapshot.exists()) {
              setError("Phone number not registered.");
-             setLoading(false); 
-             return;
+             setLoading(false); return;
         }
 
-        // 3. Verify Email Match
         const guestData = snapshot.val();
         if (guestData.email.toLowerCase() !== email.trim().toLowerCase()) {
             setError("Email does not match our records.");
-            setLoading(false); 
-            return;
+            setLoading(false); return;
         }
 
-        // 4. Success
         userId = `USER-${cleanInputPhone}`;
     }
+
+    // 3. Success -> Create Session
     try {
-        // Save session data to Firebase (So Moderator can see this user in the list)
-        // We capture the database key (userRef.key) to allow banning/kicking later
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
-            email,
-            phone,
-            role: finalRole,
-            userId,
+            email, 
+            phone: userPhone, 
+            role: finalRole, 
+            userId, 
             joinedAt: Date.now(),
             restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
         });
-
-        // Navigate with the determined role and IDs
         navigate(`/room/${roomId}?role=${finalRole}&uid=${userId}&dbKey=${userRef.key}`);
-
     } catch (err) {
-        console.error("Login Error:", err);
-        setError("Connection Failed. Try again.");
-        setLoading(false);
+        console.error(err); setError("Connection Failed"); setLoading(false);
     }
   };
 
@@ -149,18 +157,35 @@ export const LoginPage = () => {
                 </div>
             </div>
 
-            {/* Phone Input */}
+            {/* Conditional Input: Password (Host) vs Phone (Audience) */}
             <div className="space-y-1">
-                <label className="text-[10px] font-mono text-white uppercase ml-2">Phone Number</label>
+                <label className="text-[10px] font-mono text-white uppercase ml-2">
+                    {role === 'host' ? 'Access Password' : 'Phone Number'}
+                </label>
                 <div className="relative group">
-                    <Phone className="absolute left-4 top-3.5 w-4 h-4 text-white" />
-                    <input 
-                        type="tel" 
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="9876543210"
-                        className="w-full bg-white/20 border border-white rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/50"
-                    />
+                    {role === 'host' ? (
+                        <>
+                            <Key className="absolute left-4 top-3.5 w-4 h-4 text-white" />
+                            <input 
+                                type="password" 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)} 
+                                placeholder="••••••••" 
+                                className="w-full bg-white/20 border border-white rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/50"
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <Phone className="absolute left-4 top-3.5 w-4 h-4 text-white" />
+                            <input 
+                                type="tel" 
+                                value={phone} 
+                                onChange={(e) => setPhone(e.target.value)} 
+                                placeholder="9876543210" 
+                                className="w-full bg-white/20 border border-white rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 transition-colors placeholder:text-white/50"
+                            />
+                        </>
+                    )}
                 </div>
             </div>
 
