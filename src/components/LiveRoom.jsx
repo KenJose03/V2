@@ -255,7 +255,7 @@ export const LiveRoom = ({ roomId }) => {
   }
 
   return (
-    <div className="relative w-full h-screen bg-black text-white overflow-hidden">
+    <div className="relative w-full h-[100dvh] bg-black text-white overflow-hidden">
       
       {/* LAYER 1: VIDEO */}
       <div className="absolute inset-0 z-0">
