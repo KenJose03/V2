@@ -280,14 +280,31 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
       if (isAuctionActive) return;
       set(ref(db, `rooms/${roomId}/bid`), Math.max(0, currentBid + amount));
   };
+  
+  // 1. ADD THIS HELPER FUNCTION
 
-  const handleIncrease = () => setCustomBid(prev => prev + 10);
-  const handleDecrease = () => {
-      if (customBid > currentBid + 10) setCustomBid(prev => prev - 10);
+ const triggerHaptic = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(15); // 15ms vibration
+    }
+  };
+
+
+  const handleIncrease = () => {
+      triggerHaptic(); // <--- Add this
+      setCustomBid(prev => prev + 10);
+  };
+
+ const handleDecrease = () => {
+      if (customBid > currentBid + 10) {
+          triggerHaptic(); // <--- Add this
+          setCustomBid(prev => prev - 10);
+      }
   };
 
   const placeBid = () => {
     if (!isAuctionActive) return; 
+     triggerHaptic();
     // 1. Check restriction
     if (restrictions.isBidBanned) {
         alert("You are banned from bidding.");
