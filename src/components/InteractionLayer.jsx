@@ -281,14 +281,36 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
       set(ref(db, `rooms/${roomId}/bid`), Math.max(0, currentBid + amount));
   };
   
-  // 1. ADD THIS HELPER FUNCTION
 
- const triggerHaptic = () => {
+  // FIXED: Combined Vibration + Sound inside one function
+  const triggerHaptic = () => {
+    // 1. Stronger Vibration (Android)
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(15); // 15ms vibration
+        navigator.vibrate(25); 
+    }
+
+    // 2. "Tick" Sound (iPhone / Desktop)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+        try {
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            // Sound Profile: High pitch (800Hz), very short (0.03s)
+            osc.frequency.setValueAtTime(800, ctx.currentTime);
+            gain.gain.setValueAtTime(0.025, ctx.currentTime); // Low volume (5%)
+            
+            osc.start();
+            osc.stop(ctx.currentTime + 0.03);
+        } catch (e) {
+            // Ignore audio errors
+        }
     }
   };
-
 
   const handleIncrease = () => {
       triggerHaptic(); // <--- Add this
