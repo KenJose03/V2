@@ -127,7 +127,15 @@ export const LiveRoom = ({ roomId }) => {
              // Try HD
              const tracks = await AgoraRTC.createMicrophoneAndCameraTracks(
                  { echoCancellation: true, noiseSuppression: true },
-                 { encoderConfig: "720p_1" } 
+                 { 
+                    encoderConfig: {
+                        width: 1280,
+                        height: 720,
+                        frameRate: 60,      // <--- 60 FPS
+                        bitrateMin: 2000,   // Higher bitrate for smooth motion
+                        bitrateMax: 4000
+                    }
+                 } 
              );
              micTrack = tracks[0];
              camTrack = tracks[1];

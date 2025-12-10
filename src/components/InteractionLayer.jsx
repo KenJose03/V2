@@ -574,7 +574,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
                         // - p-4 (more padding)
                         // - w-64 (fixed width)
                         className={`
-                                w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/5
+                                w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/10
                                 ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all' : ''}
                             `}
                     >
