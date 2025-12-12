@@ -1,33 +1,31 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, useParams, useSearchParams } from 'react-router-dom';
-import WelcomePage from './components/WelcomePage';
-import { LiveRoom } from './components/LiveRoom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './components/LoginPage';
-
-// Wrapper to handle the Room logic
-const RoomWrapper = () => {
-  const { roomId } = useParams();
-  const [searchParams] = useSearchParams();
-  const isHost = searchParams.get('role') === 'host';
-  
-  return <LiveRoom roomId={roomId} isHost={isHost} />;
-};
+import { LiveRoom } from './components/LiveRoom';
+import { WelcomePage } from './components/WelcomePage'; // Keep if you use it, or remove
 
 function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
-        {/* Step 1: Landing */}
-        <Route path="/" element={<WelcomePage />} />
+        {/* MODULE 1 CHANGE: Root now points to Unified Login Page */}
+        <Route path="/" element={<LoginPage />} />
         
-        {/* Step 2: Login / Validation */}
+        {/* Legacy/Direct link support */}
         <Route path="/login" element={<LoginPage />} />
         
-        {/* Step 3: The Room */}
+        {/* The Live Room (Protected by Login Logic) */}
         <Route path="/room/:roomId" element={<RoomWrapper />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
+
+// Wrapper to parse params if needed
+const RoomWrapper = () => {
+    const params = window.location.pathname.split('/');
+    const roomId = params[params.length - 1];
+    return <LiveRoom roomId={roomId} />;
+};
 
 export default App;
