@@ -1,29 +1,119 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Mail, AlertCircle, Key } from 'lucide-react';
+import { ArrowRight, Mail, AlertCircle, Key, Phone, Lock } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 
+// --- 1. COIN STACK ANIMATION (Copied from WelcomePage) ---
+const CoinStackLoader = ({ onComplete }) => {
+  const [coinCount, setCoinCount] = useState(0);
+  const [phase, setPhase] = useState('stacking');
+  const totalCoins = 5;
+
+  useEffect(() => {
+    if (phase === 'stacking') {
+        const interval = setInterval(() => {
+            setCoinCount(prev => {
+                if (prev >= totalCoins) {
+                    clearInterval(interval);
+                    setPhase('hammer');
+                    return prev;
+                }
+                return prev + 1;
+            });
+        }, 200);
+        return () => clearInterval(interval);
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === 'hammer') {
+        const timer = setTimeout(() => { setPhase('impact'); }, 400); 
+        return () => clearTimeout(timer);
+    }
+    if (phase === 'impact') {
+        const timer = setTimeout(() => { onComplete(); }, 1500);
+        return () => clearTimeout(timer);
+    }
+  }, [phase, onComplete]);
+
+  return (
+    <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#FF6600] text-white">
+       <motion.div
+         className="font-mono text-[10px] uppercase tracking-[0.3em] text-white mb-4 absolute top-24"
+         animate={{ opacity: phase === 'impact' ? 0 : [0.4, 1, 0.4] }}
+       >
+         LOADING
+       </motion.div>
+
+       <div className="relative h-64 w-full flex items-end justify-center mt-10">
+         {/* Coins */}
+         <AnimatePresence>
+           {phase !== 'impact' && Array.from({ length: coinCount }).map((_, i) => (
+             <motion.div
+                key={i}
+                initial={{ y: -100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0, transition: { duration: 0.1 } }}
+                className="absolute w-48 h-12 bg-white"
+                style={{ 
+                    bottom: i * 14, 
+                    zIndex: i,
+                    clipPath: 'polygon(10% 0, 90% 0, 100% 20%, 100% 80%, 90% 100%, 10% 100%, 0 80%, 0 20%)',
+                    boxShadow: '0 0 0 2px #FF6600 inset, 0 0 0 4px white inset'
+                }} 
+            />
+           ))}
+         </AnimatePresence>
+
+         {/* Hammer */}
+         <AnimatePresence>
+           {phase === 'hammer' && (
+               <motion.div
+                    className="absolute -right-4 bottom-0 origin-bottom z-50"
+                    initial={{ rotate: 25, opacity: 0, scale: 0.9 }}
+                    animate={{ rotate: -64, opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.1 }}
+                    transition={{ duration: 0.4, ease: "backIn" }}
+                >
+                    <div className="relative w-64 h-60">
+                        <div className="absolute left-1/2 bottom-0 w-4 h-60 bg-white -translate-x-1/2 border-4 border-black"></div>
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-20 bg-white origin-bottom border-4 border-black"></div>
+                    </div>
+                </motion.div>
+           )}
+         </AnimatePresence>
+
+         {/* Impact */}
+         {phase === 'impact' && (
+           <motion.div
+               initial={{ scale: 0, rotate: -10 }}
+               animate={{ scale: 1, rotate: 0 }}
+               transition={{ type: "spring", stiffness: 400, damping: 15 }}
+               className="absolute inset-0 flex items-center justify-center z-50"
+           >
+               <h1 className="font-display font-black text-7xl text-white tracking-tighter px-4 py-2 mix-blend-normal">DIBS</h1>
+           </motion.div>
+         )}
+       </div>
+    </div>
+  );
+};
+
+// --- 2. MAIN LOGIN PAGE ---
 export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
   const roomId = searchParams.get('room') || "CHIC";
 
-  // UI States
-  const [showSplash, setShowSplash] = useState(true); // Control the Animation
+  const [showSplash, setShowSplash] = useState(true); // Toggle between Anim and Form
+
+  // Form State
   const [email, setEmail] = useState("");
   const [authKey, setAuthKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // --- 1. SPLASH SCREEN TIMER ---
-  useEffect(() => {
-      // Show logo for 2.5 seconds, then transition to form
-      const timer = setTimeout(() => setShowSplash(false), 2500);
-      return () => clearTimeout(timer);
-  }, []);
 
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -54,7 +144,7 @@ export const LoginPage = () => {
     let userId = '';
     let userPhone = '';
 
-    // LOGIC
+    // Logic
     if (inputEmail === HOST_EMAIL) {
         if (inputKey === HOST_PWD) {
             finalRole = 'host'; userId = 'HOST'; userPhone = 'N/A';
@@ -70,7 +160,6 @@ export const LoginPage = () => {
         }
     }
     else {
-        // Audience Check
         const cleanPhone = inputKey.replace(/\D/g, '').slice(-10);
         if (cleanPhone.length < 10) {
             setError("Invalid Phone Number"); setLoading(false); return;
@@ -95,7 +184,6 @@ export const LoginPage = () => {
         }
     }
 
-    // JOIN
     try {
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
@@ -109,41 +197,47 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="w-full h-screen bg-[#FF6600] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-      
-      {/* BACKGROUND DECORATION (Optional) */}
-      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 pointer-events-none"></div>
-
-      <div className="w-full max-w-sm z-10 flex flex-col items-center">
+    <div className="w-full h-screen bg-[#FF6600] text-white overflow-hidden relative">
+      <AnimatePresence mode="wait">
         
-        {/* --- ANIMATED LOGO --- */}
-        {/* layoutId ensures the logo smoothly resizes from Splash to Form position */}
-        <motion.div 
-            layout 
-            className={`flex flex-col items-center transition-all duration-700 ${showSplash ? 'mb-0 scale-125' : 'mb-8 scale-100'}`}
-        >
-            <motion.img 
-                layoutId="logo"
-                src="/Dibs Logo.svg" 
-                alt="DIBS" 
-                className="w-48 drop-shadow-lg"
-            />
-        </motion.div>
+        {/* STEP 1: SPLASH ANIMATION */}
+        {showSplash ? (
+            <motion.div 
+                key="splash"
+                className="absolute inset-0 z-50"
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+            >
+                <CoinStackLoader onComplete={() => setShowSplash(false)} />
+            </motion.div>
+        ) : (
+            
+        /* STEP 2: LOGIN FORM */
+            <motion.div 
+                key="form"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center w-full h-full px-6 z-20 relative"
+            >
+                <div className="w-full max-w-sm space-y-8">
+                    {/* Header */}
+                    <div className="text-center space-y-2">
+                        <h1 
+                            className="text-7xl font-black leading-[0.85] tracking-tight text-white select-none"
+                            style={{ textShadow: '4px 4px 0px rgba(0,0,0,0.1)' }}
+                        >
+                        DIBS!
+                        </h1>
+                        <p className="text-xs font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
+                        ONE PIECE ONE CHANGE
+                        </p>
+                    </div>
 
-        {/* --- LOGIN FORM (Fades in after splash) --- */}
-        <AnimatePresence>
-            {!showSplash && (
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2, duration: 0.5 }}
-                    className="w-full space-y-6"
-                >
-                    {/* (Room Name Removed as requested) */}
-
-                    <form onSubmit={handleSmartLogin} className="space-y-4">
+                    {/* Form */}
+                    <form onSubmit={handleSmartLogin} className="space-y-5">
+                        
                         <div className="space-y-1">
-                            <label className="text-[10px] font-mono text-white/80 uppercase ml-2 tracking-wider">Email</label>
+                            <label className="text-[10px] font-mono text-white/90 uppercase ml-2 tracking-wider">Email</label>
                             <div className="relative group">
                                 <Mail className="absolute left-4 top-3.5 w-4 h-4 text-white" />
                                 <input 
@@ -151,13 +245,13 @@ export const LoginPage = () => {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="name@example.com"
-                                    className="w-full bg-white/20 border border-white/30 rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 focus:border-white transition-all placeholder:text-white/50"
+                                    className="w-full bg-white/20 border-b-2 border-white/50 rounded-t-lg py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 focus:border-white transition-all placeholder:text-white/60"
                                 />
                             </div>
                         </div>
 
                         <div className="space-y-1">
-                            <label className="text-[10px] font-mono text-white/80 uppercase ml-2 tracking-wider">
+                            <label className="text-[10px] font-mono text-white/90 uppercase ml-2 tracking-wider">
                                 Phone / Password
                             </label>
                             <div className="relative group">
@@ -166,8 +260,8 @@ export const LoginPage = () => {
                                     type="text" 
                                     value={authKey} 
                                     onChange={(e) => setAuthKey(e.target.value)} 
-                                    placeholder="9876543210" 
-                                    className="w-full bg-white/20 border border-white/30 rounded-xl py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 focus:border-white transition-all placeholder:text-white/50"
+                                    placeholder="9876543210  OR  ••••••" 
+                                    className="w-full bg-white/20 border-b-2 border-white/50 rounded-t-lg py-3 pl-10 pr-4 text-sm font-mono text-white focus:outline-none focus:bg-white/30 focus:border-white transition-all placeholder:text-white/60"
                                 />
                             </div>
                         </div>
@@ -178,7 +272,7 @@ export const LoginPage = () => {
                                     initial={{ height: 0, opacity: 0 }}
                                     animate={{ height: 'auto', opacity: 1 }}
                                     exit={{ height: 0, opacity: 0 }}
-                                    className="flex items-center gap-2 text-white bg-red-500/20 p-3 rounded-lg border border-red-200/50"
+                                    className="flex items-center gap-2 text-white bg-black/20 p-3 rounded-lg border border-white/20"
                                 >
                                     <AlertCircle className="w-4 h-4" />
                                     <span className="text-xs font-bold uppercase">{error}</span>
@@ -189,22 +283,22 @@ export const LoginPage = () => {
                         <button 
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-white text-[#FF6600] font-black uppercase tracking-widest py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 shadow-xl"
+                            className="w-full bg-white text-[#FF6600] font-black uppercase tracking-widest py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-8 shadow-xl"
                         >
                             {loading ? (
-                                <span className="animate-pulse">Loading...</span>
+                                <span className="animate-pulse">Accessing...</span>
                             ) : (
                                 <>
-                                    <span>ENTER</span>
+                                    <span>ENTER LIVE ROOM</span>
                                     <ArrowRight className="w-4 h-4" />
                                 </>
                             )}
                         </button>
                     </form>
-                </motion.div>
-            )}
-        </AnimatePresence>
-      </div>
+                </div>
+            </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
