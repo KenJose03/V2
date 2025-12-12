@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Mail, AlertCircle, Key, Phone, Lock } from 'lucide-react';
+import { ArrowRight, Mail, AlertCircle, Key } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
 
-// --- 1. COIN STACK ANIMATION (Copied from WelcomePage) ---
+// --- 1. COIN STACK ANIMATION (Source: WelcomePage.jsx) ---
 const CoinStackLoader = ({ onComplete }) => {
   const [coinCount, setCoinCount] = useState(0);
   const [phase, setPhase] = useState('stacking');
@@ -39,7 +39,8 @@ const CoinStackLoader = ({ onComplete }) => {
   }, [phase, onComplete]);
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#FF6600] text-white">
+    <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#FF6600] text-white overflow-hidden">
+       {/* LOADING TEXT */}
        <motion.div
          className="font-mono text-[10px] uppercase tracking-[0.3em] text-white mb-4 absolute top-24"
          animate={{ opacity: phase === 'impact' ? 0 : [0.4, 1, 0.4] }}
@@ -85,7 +86,7 @@ const CoinStackLoader = ({ onComplete }) => {
            )}
          </AnimatePresence>
 
-         {/* Impact */}
+         {/* Impact - THE LOGO REVEAL */}
          {phase === 'impact' && (
            <motion.div
                initial={{ scale: 0, rotate: -10 }}
@@ -93,7 +94,13 @@ const CoinStackLoader = ({ onComplete }) => {
                transition={{ type: "spring", stiffness: 400, damping: 15 }}
                className="absolute inset-0 flex items-center justify-center z-50"
            >
-               <h1 className="font-display font-black text-7xl text-white tracking-tighter px-4 py-2 mix-blend-normal">DIBS</h1>
+               {/* CORRECT LOGO STYLE FROM WELCOME PAGE */}
+               <h1 
+                className="text-7xl font-display font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                style={{ textShadow: '8px 8px 0px #000000' }}
+               >
+                DIBS!
+               </h1>
            </motion.div>
          )}
        </div>
@@ -107,7 +114,7 @@ export const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('room') || "CHIC";
 
-  const [showSplash, setShowSplash] = useState(true); // Toggle between Anim and Form
+  const [showSplash, setShowSplash] = useState(true); 
 
   // Form State
   const [email, setEmail] = useState("");
@@ -144,7 +151,7 @@ export const LoginPage = () => {
     let userId = '';
     let userPhone = '';
 
-    // Logic
+    // LOGIC
     if (inputEmail === HOST_EMAIL) {
         if (inputKey === HOST_PWD) {
             finalRole = 'host'; userId = 'HOST'; userPhone = 'N/A';
@@ -160,6 +167,7 @@ export const LoginPage = () => {
         }
     }
     else {
+        // Audience Check
         const cleanPhone = inputKey.replace(/\D/g, '').slice(-10);
         if (cleanPhone.length < 10) {
             setError("Invalid Phone Number"); setLoading(false); return;
@@ -184,6 +192,7 @@ export const LoginPage = () => {
         }
     }
 
+    // JOIN ROOM
     try {
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
@@ -197,10 +206,10 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="w-full h-screen bg-[#FF6600] text-white overflow-hidden relative">
+    <div className="w-full h-screen bg-[#FF6600] text-white relative overflow-hidden">
       <AnimatePresence mode="wait">
         
-        {/* STEP 1: SPLASH ANIMATION */}
+        {/* STEP 1: ANIMATION */}
         {showSplash ? (
             <motion.div 
                 key="splash"
@@ -220,21 +229,21 @@ export const LoginPage = () => {
                 className="flex flex-col items-center justify-center w-full h-full px-6 z-20 relative"
             >
                 <div className="w-full max-w-sm space-y-8">
-                    {/* Header */}
+                    {/* LOGO HEADER (Matching the animation end state) */}
                     <div className="text-center space-y-2">
                         <h1 
-                            className="text-7xl font-black leading-[0.85] tracking-tight text-white select-none"
-                            style={{ textShadow: '4px 4px 0px rgba(0,0,0,0.1)' }}
+                            className="text-8xl font-display font-black leading-[0.85] tracking-tight text-white select-none mix-blend-normal"
+                            style={{ textShadow: '8px 8px 0px #000000' }}
                         >
                         DIBS!
                         </h1>
-                        <p className="text-xs font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
+                        <p className="text-sm font-bold tracking-[0.3em] text-white uppercase font-sans opacity-90">
                         ONE PIECE ONE CHANGE
                         </p>
                     </div>
 
-                    {/* Form */}
-                    <form onSubmit={handleSmartLogin} className="space-y-5">
+                    {/* FORM */}
+                    <form onSubmit={handleSmartLogin} className="space-y-6 mt-12">
                         
                         <div className="space-y-1">
                             <label className="text-[10px] font-mono text-white/90 uppercase ml-2 tracking-wider">Email</label>
@@ -286,10 +295,10 @@ export const LoginPage = () => {
                             className="w-full bg-white text-[#FF6600] font-black uppercase tracking-widest py-4 rounded-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 mt-8 shadow-xl"
                         >
                             {loading ? (
-                                <span className="animate-pulse">Accessing...</span>
+                                <span className="animate-pulse">Verifying...</span>
                             ) : (
                                 <>
-                                    <span>ENTER LIVE ROOM</span>
+                                    <span>ENTER ROOM</span>
                                     <ArrowRight className="w-4 h-4" />
                                 </>
                             )}
