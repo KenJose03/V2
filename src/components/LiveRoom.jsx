@@ -81,9 +81,18 @@ export const LiveRoom = ({ roomId }) => {
       try {
         setStatus("CONNECTING...");
         
-        // 1. Create Client
+        // --- NEW TOKEN FETCHING LOGIC ---
+        // 1. Fetch Token from our Backend API
+        const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
+        const data = await response.json();
+        
+        if (!data.token) throw new Error("Failed to get Agora Token");
+        const token = data.token;
+        // --------------------------------
+
+        // 2. Create Client (Existing Code)
         myClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-        clientRef.current = myClient; 
+        clientRef.current = myClient;
 
         if (isHost) {
           await myClient.setClientRole("host");
@@ -113,7 +122,7 @@ export const LiveRoom = ({ roomId }) => {
         });
 
         // 3. Join
-        await myClient.join(AGORA_APP_ID, roomId, AGORA_TOKEN, null);
+        await myClient.join(AGORA_APP_ID, roomId, token, null);
         if (isActive) setJoined(true);
 
         // 4. Host Setup
