@@ -134,10 +134,20 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
     "CURATING THE CHAOS..."
     ];
 
+    // 1. CYCLE QUIPS EVERY 10 SECONDS
     useEffect(() => {
-        // Pick a random message on load
+        // Set initial random quip
         setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
 
+        const interval = setInterval(() => {
+            setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
+        }, 10000); // 10000ms = 10s
+
+        return () => clearInterval(interval);
+    }, []);
+
+    // 2. COUNTDOWN TIMER
+    useEffect(() => {
         if (!nextEvent) return;
 
         const interval = setInterval(() => {
@@ -147,17 +157,18 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
 
             if (distance < 0) {
                 clearInterval(interval);
-                // TIMER FINISHED: Trigger auto-entry callback
                 if (onTimerFinished) onTimerFinished();
             } else {
-                // Calculate HH:MM:SS
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                // FIX: Calculate TOTAL HOURS (remove the % 24 hours logic)
+                // This ensures "1 Day 2 Hours" shows as "26 HRS" instead of "02 HRS"
+                const hours = Math.floor(distance / (1000 * 60 * 60));
+                
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                
                 setTimeLeft({ h: hours, m: minutes, s: seconds });
             }
         }, 1000);
-
         return () => clearInterval(interval);
     }, [nextEvent, onTimerFinished]);
 
@@ -376,7 +387,16 @@ export const LoginPage = () => {
         
         {/* SCREEN 2: WAITING ROOM (BLOCKED) */}
         {currentScreen === 'waiting' && (
-            <WaitingScreen key="waiting" message={waitingMessage} nextEvent={nextEventTime} />
+            <WaitingScreen 
+                key="waiting" 
+                message={waitingMessage} 
+                nextEvent={nextEventTime}
+                // NEW: When timer ends, go back to login form automatically
+                onTimerFinished={() => {
+                    setCurrentScreen('login');
+                    setWaitingMessage("");
+                }}
+            />
         )}
 
         {/* SCREEN 3: LOGIN FORM */}
