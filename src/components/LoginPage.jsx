@@ -103,34 +103,107 @@ const CoinStackLoader = ({ onComplete }) => {
   );
 };
 
-// --- 2. WAITING ROOM SCREEN (The "Blocked" State) ---
-const WaitingScreen = ({ message, nextEvent }) => {
-    // Simple creative message for now
+// --- 2. WAITING ROOM SCREEN (HYPE MODE) ---
+const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
+    const [timeLeft, setTimeLeft] = useState(null);
+    const [quip, setQuip] = useState("PREPARING THE AUCTION BLOCK...");
+
+    // Quirky messages to show randomly
+    const QUIPS = [
+    "SHARPENING THE GAVEL...",
+    "POLISHING THE GOODS...",
+    "COUNTING THE COINS...",
+    "CALM DOWN, IT'S COMING.",
+    "PATIENCE PAYS OFF.",
+    "NOT YET, TIGER.",
+    "GOOD THINGS TAKE TIME.",
+    "STEAMING THE SILK...",
+    "DIGGING IN THE BINS...",
+    "UNTANGLING HANGERS...",
+    "CHECKING THE POCKETS...",
+    "DUSTING OFF THE GRAILS...",
+    "LOADING THE DRIP...",
+    "WALLETS AT THE READY...",
+    "PREPPING THE SNIPE...",
+    "HOLD YOUR HORSES...",
+    "SECURE THE BAG...",
+    "HYPE INCOMING...",
+    "THRIFT GODS ARE BUSY...",
+    "DON'T BLINK...",
+    "WAKING THE AUCTIONEER...",
+    "CURATING THE CHAOS..."
+    ];
+
+    useEffect(() => {
+        // Pick a random message on load
+        setQuip(QUIPS[Math.floor(Math.random() * QUIPS.length)]);
+
+        if (!nextEvent) return;
+
+        const interval = setInterval(() => {
+            const now = new Date().getTime();
+            const target = new Date(nextEvent).getTime();
+            const distance = target - now;
+
+            if (distance < 0) {
+                clearInterval(interval);
+                // TIMER FINISHED: Trigger auto-entry callback
+                if (onTimerFinished) onTimerFinished();
+            } else {
+                // Calculate HH:MM:SS
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                setTimeLeft({ h: hours, m: minutes, s: seconds });
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [nextEvent, onTimerFinished]);
+
     return (
         <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             className="flex flex-col items-center justify-center w-full h-full px-6 z-20 relative text-center space-y-8"
         >
-            <Lock className="w-16 h-16 text-white animate-pulse" />
+            <Lock className="w-12 h-12 text-white/50" />
             
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <h1 className="text-5xl font-display font-black text-white uppercase tracking-tight leading-none">
-                    DOORS ARE<br/>CLOSED
+                    DOORS<br/>LOCKED
                 </h1>
-                <p className="font-mono text-sm uppercase tracking-widest text-white/80 max-w-xs mx-auto leading-relaxed border-t border-b border-white/20 py-4">
-                    {message || "THE AUCTION HAS NOT STARTED YET."}
+                
+                {/* THE COUNTDOWN DISPLAY */}
+                {timeLeft ? (
+                    <div className="flex items-center justify-center gap-4 font-mono text-4xl font-bold text-white tabular-nums">
+                        <div className="flex flex-col items-center">
+                            <span>{String(timeLeft.h).padStart(2, '0')}</span>
+                            <span className="text-[10px] opacity-50">HRS</span>
+                        </div>
+                        <span className="opacity-50 -mt-4">:</span>
+                        <div className="flex flex-col items-center">
+                            <span>{String(timeLeft.m).padStart(2, '0')}</span>
+                            <span className="text-[10px] opacity-50">MIN</span>
+                        </div>
+                        <span className="opacity-50 -mt-4">:</span>
+                        <div className="flex flex-col items-center text-[#FF6600] bg-white px-2 rounded-lg">
+                            <span>{String(timeLeft.s).padStart(2, '0')}</span>
+                            <span className="text-[10px] opacity-50">SEC</span>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="animate-pulse font-mono text-xl">CALCULATING...</div>
+                )}
+
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/80 border-t border-b border-white/20 py-4 max-w-xs mx-auto">
+                    {quip}
                 </p>
             </div>
 
             {nextEvent && (
-                <div className="bg-white/10 p-4 rounded-xl border border-white/20">
-                     <p className="font-mono text-[10px] uppercase text-white/60 mb-1">Next Drop</p>
-                     <p className="font-mono text-lg font-bold text-white">
-                        {new Date(nextEvent).toLocaleString('en-US', { 
-                            month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true 
-                        })}
-                     </p>
+                <div className="absolute bottom-10 font-mono text-[10px] text-white/40 uppercase">
+                    Event Starts: {new Date(nextEvent).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
             )}
         </motion.div>
