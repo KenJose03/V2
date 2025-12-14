@@ -76,27 +76,6 @@ export const InteractionLayer = ({ roomId, isHost, isModerator }) => {
   const persistentDbKey = searchParams.get('dbKey');
   const persistentUserId = searchParams.get('uid');
 
-  // --- SYNC LOGIC (With Consistent Hashing) ---
-  useEffect(() => {
-      if (isHost) {
-          setUsername("HOST");
-      } else {
-          if (persistentUserId) {
-              // Deterministic Name: Generate consistent index from ID string
-              let hash = 0;
-              for (let i = 0; i < persistentUserId.length; i++) {
-                  hash = persistentUserId.charCodeAt(i) + ((hash << 5) - hash);
-              }
-              const index = Math.abs(hash) % quirky_usernames.length;
-              setUsername(quirky_usernames[index]);
-          } else {
-              // Fallback random
-              const randomName = quirky_usernames[Math.floor(Math.random() * quirky_usernames.length)];
-              setUsername(randomName);
-          }
-      }
-  }, [isHost, persistentUserId]);
-
   useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);

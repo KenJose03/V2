@@ -367,10 +367,14 @@ export const LoginPage = () => {
     try {
         const userRef = push(ref(db, `audience_data/${roomId}`));
         await set(userRef, {
-            email: mail, phone: phone, role: role, userId: uId, joinedAt: Date.now(),
+            email: mail, 
+            phone: phone, 
+            role: role, 
+            userId: uId, 
+            joinedAt: Date.now(),
             restrictions: { isMuted: false, isBidBanned: false, isKicked: false }
         });
-        navigate(`/room/${roomId}?dbKey=${userRef.key}`);
+        navigate(`/room/${roomId}?dbKey=${userRef.key}&uid=${uId}&role=${role}`);
     } catch (err) {
         setError("Failed to join."); setLoading(false);
     }
@@ -432,7 +436,7 @@ export const LoginPage = () => {
                         
                         <input
                             type="text"
-                            placeholder="PHONE / PASSWORD"
+                            placeholder="PHONE NUMBER"
                             value={authKey}
                             onChange={(e) => setAuthKey(e.target.value)}
                             className="w-full bg-white/20 border-b-2 border-white text-white font-mono text-center py-4 focus:outline-none focus:bg-white/30 transition-colors uppercase placeholder:text-white/60"
