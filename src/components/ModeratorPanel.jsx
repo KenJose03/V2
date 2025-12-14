@@ -141,6 +141,19 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
       return quirky_usernames[index];
   };
 
+  // --- INSERT BEFORE RETURN STATEMENT ---
+  
+  // Calculate Stats on the fly based on the processed 'users' list
+  const stats = users.reduce((acc, user) => {
+      if (user.role === 'spectator') {
+          user.isOnline ? acc.activeSpectators++ : acc.inactiveSpectators++;
+      } else {
+          // Defaults to Audience (Bidders)
+          user.isOnline ? acc.activeAudience++ : acc.inactiveAudience++;
+      }
+      return acc;
+  }, { activeAudience: 0, inactiveAudience: 0, activeSpectators: 0, inactiveSpectators: 0 });
+
   return (
     <div className="absolute top-20 left-4 right-4 bottom-32 bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden flex flex-col z-50 pointer-events-auto shadow-2xl">
       
@@ -174,6 +187,14 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
         </div>
       </div>
 
+      {/* STATS BAR */}
+      <div className="grid grid-cols-4 gap-2 p-4 border-b border-white/10 bg-black/50">
+          <StatBox label="Active Bidders" count={stats.activeAudience} color="text-green-500" />
+          <StatBox label="Active Specs" count={stats.activeSpectators} color="text-yellow-500" />
+          <StatBox label="Offline Bidders" count={stats.inactiveAudience} color="text-zinc-500" />
+          <StatBox label="Offline Specs" count={stats.inactiveSpectators} color="text-zinc-600" />
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         
@@ -185,52 +206,90 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
                 const name = getQuirkyName(user.userId).toLowerCase();
                 const id = user.userId.toLowerCase();
                 return name.includes(term) || id.includes(term);
-            }).map(user => (
-            <div 
-                key={user.userId}
-                // CHANGE: Add opacity-50 if offline 
-                className={`border border-white/5 p-3 rounded-xl flex justify-between items-center group transition-all ${user.isOnline ? 'bg-white/10' : 'bg-white/5 opacity-50'}`}>
-                <div>
-                    <div className="flex items-center gap-2">
-                        {/* CHANGE: Add Online/Offline Dot */}
-                        <div className={`w-2 h-2 rounded-full ${user.isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`} />
-
-                        <span className="font-bold text-white text-sm">{getQuirkyName(user.userId)}</span>
-                        {user.restrictions?.isKicked && <span className="text-[10px] bg-red-500 px-1 rounded text-white">KICKED</span>}
-                    </div>
-                    {/* 2. Subtext: UserID | Email */}
-                    <div className="text-[10px] text-zinc-400 font-mono mt-1 pl-4">
-                        {user.userId} | {user.email}
-                        {!user.isOnline && <span className="ml-2 italic text-zinc-600">(Offline)</span>}
-                    </div>
-                </div>
+            }).map(user => {
+                const isSpectator = user.role === 'spectator';
+                // FIX: Use the property that already exists on the user object
+                const isOnline = user.isOnline; 
                 
-                {/* 3. Actions: Hidden by default, Visible on Group Hover */}
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button 
-                        onClick={() => toggleRestriction(user, 'isMuted')}
-                        className={`p-2 rounded-lg transition-colors ${user.restrictions?.isMuted ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-zinc-400 hover:bg-white/20'}`}
-                        title={user.restrictions?.isMuted ? "Unmute" : "Mute Chat"}
+                return (
+                    <div 
+                        key={user.dbKey} 
+                        className={`
+                            flex items-center justify-between p-3 rounded-xl border transition-all mb-2
+                            ${isOnline 
+                                ? (isSpectator ? 'bg-yellow-900/10 border-yellow-500/20' : 'bg-zinc-800/50 border-white/10') 
+                                : 'bg-black/40 border-white/5 opacity-50'
+                            }
+                        `}
                     >
-                        <MessageSquareOff className="w-4 h-4" />
-                    </button>
-                    <button 
-                        onClick={() => toggleRestriction(user, 'isBidBanned')}
-                        className={`p-2 rounded-lg transition-colors ${user.restrictions?.isBidBanned ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-zinc-400 hover:bg-white/20'}`}
-                        title={user.restrictions?.isBidBanned ? "Unban Bid" : "Ban Bidding"}
-                    >
-                        <Ban className="w-4 h-4" />
-                    </button>
-                    <button 
-                        onClick={() => kickUser(user)}
-                        className="p-2 rounded-lg bg-white/10 text-zinc-400 hover:bg-red-600 hover:text-white transition-colors"
-                        title="Kick User"
-                    >
-                        <XCircle className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-        ))}
+                        {/* LEFT: INFO */}
+                        <div className="flex items-center gap-3">
+                            {/* Status Dot */}
+                            <div className={`
+                                w-2.5 h-2.5 rounded-full shadow-sm 
+                                ${isOnline 
+                                    ? (isSpectator ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 animate-pulse') 
+                                    : 'bg-red-900/50'
+                                }
+                            `} />
+                            
+                            <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    <span className={`font-mono text-sm font-bold ${isOnline ? 'text-white' : 'text-zinc-500'}`}>
+                                        {getQuirkyName(user.userId)}
+                                    </span>
+                                    
+                                    {/* ROLE BADGE */}
+                                    {isSpectator ? (
+                                        <span className="px-1.5 py-0.5 bg-yellow-500/10 border border-yellow-500/50 text-yellow-500 text-[9px] font-black uppercase rounded" title="Spectator">
+                                            SPEC
+                                        </span>
+                                    ) : (
+                                        <span className="px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/50 text-blue-500 text-[9px] font-black uppercase rounded" title="Bidder">
+                                            BIDDER
+                                        </span>
+                                    )}
+
+                                    {user.restrictions?.isKicked && <span className="text-[10px] bg-red-500 px-1 rounded text-white">KICKED</span>}
+                                </div>
+                                <div className="text-[10px] text-zinc-500 truncate max-w-[150px] font-mono">
+                                    {user.userId} | {user.email}
+                                    {!isOnline && <span className="ml-1 italic opacity-50">(Offline)</span>}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT: ACTIONS (Hidden until hover) */}
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => toggleRestriction(user, 'isMuted')}
+                                className={`p-2 rounded-lg border ${user.restrictions?.isMuted ? 'bg-red-500 border-red-500 text-white' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
+                                title="Mute Chat"
+                            >
+                                <MessageSquareOff className="w-3 h-3" />
+                            </button>
+
+                            {!isSpectator && (
+                                <button 
+                                    onClick={() => toggleRestriction(user, 'isBidBanned')}
+                                    className={`p-2 rounded-lg border ${user.restrictions?.isBidBanned ? 'bg-red-500 border-red-500 text-white' : 'border-white/10 text-zinc-400 hover:bg-white/10'}`}
+                                    title="Ban from Bidding"
+                                >
+                                    <Gavel className="w-3 h-3" />
+                                </button>
+                            )}
+
+                            <button 
+                                onClick={() => kickUser(user)}
+                                className="p-2 rounded-lg border border-red-900/30 text-red-500 hover:bg-red-900/20"
+                                title="Kick User"
+                            >
+                                <Ban className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+                );
+            })}
 
         {/* AUCTION HISTORY TAB */}
         {activeTab === 'history' && history.map((item, i) => (
@@ -262,3 +321,11 @@ export const ModeratorPanel = ({ roomId, onClose }) => {
     </div>
   );
 };
+
+// --- ADD AT THE BOTTOM OF THE FILE ---
+const StatBox = ({ label, count, color }) => (
+    <div className="flex flex-col items-center justify-center bg-white/5 rounded-lg py-2">
+        <span className={`font-display font-black text-xl ${color}`}>{count}</span>
+        <span className="text-[8px] font-mono uppercase text-zinc-400 text-center leading-tight">{label}</span>
+    </div>
+);
