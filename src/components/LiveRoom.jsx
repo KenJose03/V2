@@ -5,7 +5,7 @@ import { X, Mic, MicOff, Video as VideoIcon, VideoOff, Radio, RefreshCw, Shield 
 import { AGORA_APP_ID, AGORA_TOKEN } from '../lib/settings';
 import { InteractionLayer } from './InteractionLayer';
 import { ModeratorPanel } from './ModeratorPanel';
-import { ref, get } from 'firebase/database';
+import { ref, get, onValue, update } from 'firebase/database';
 import { db } from '../lib/firebase';
 
 export const LiveRoom = ({ roomId }) => {
