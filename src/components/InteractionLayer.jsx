@@ -5,6 +5,7 @@ import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, 
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
 import inventoryRaw from '../inventory.csv?raw';
+import { logEvent } from '../lib/analytics';
 
 // --- INVENTORY ---
 // --- PARSE INVENTORY FROM CSV ---
@@ -237,6 +238,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
       isHost,
       type: 'msg'
     });
+    logEvent(roomId, 'CHAT_SENT', { user: username, type: 'msg' });
     setInput("");
   };
 
@@ -337,6 +339,12 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
         text: `${username} bid ₹${customBid}`,
         type: 'bid'
     });
+
+    logEvent(roomId, 'BID_PLACED', { 
+                user: username, 
+                amount: customBid, 
+                item: currentItem ? currentItem.name : 'Unknown' 
+            });
   };
 
   const startAuction = () => {

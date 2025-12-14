@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, AlertCircle, Key, Mail, Lock, X } from 'lucide-react';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../lib/firebase';
+import { logEvent } from '../lib/analytics';
 
 // --- 1. COIN STACK ANIMATION (Unchanged) ---
 const CoinStackLoader = ({ onComplete }) => {
@@ -249,6 +250,7 @@ export const LoginPage = () => {
     // --- 3. PHONE CLEANING ---
     const cleanPhone = inputKey.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length < 10) {
+        logEvent(roomId, 'LOGIN_ERROR', { error: 'Invalid Phone', phone: inputKey });
         setError("Invalid Phone Number"); setLoading(false); return;
     }
 
@@ -264,6 +266,9 @@ export const LoginPage = () => {
     }
     // ============================================================
 
+    // 1. Log the Attempt
+    logEvent(roomId, 'LOGIN_ATTEMPT', { email: inputEmail, phone: cleanPhone });
+
     try {
         // --- 4. BLOCK LIST CHECK (Global Ban) ---
         // Checks 'blocked_users/9876543210'. If exists, deny entry.
@@ -271,6 +276,7 @@ export const LoginPage = () => {
         const blockSnap = await get(blockedRef);
         
         if (blockSnap.exists()) {
+            logEvent(roomId, 'LOGIN_BLOCKED', { phone: cleanPhone });
             setError("ACCESS DENIED. You are blocked.");
             setLoading(false);
             return;
@@ -325,12 +331,14 @@ export const LoginPage = () => {
                 setError("Email does not match records."); setLoading(false); return;
             }
             // Join as Audience
+            logEvent(roomId, 'LOGIN_SUCCESS', { role: 'audience', phone: cleanPhone });
             await joinRoom('audience', `USER-${cleanPhone}`, cleanPhone, inputEmail);
         } else {
             // --- 8. UNREGISTERED -> SPECTATOR POPUP ---
             // Valid phone, valid time, not blocked, but not on list.
             setTempCredentials({ email: inputEmail, phone: cleanPhone });
             setLoading(false);
+            logEvent(roomId, 'LOGIN_UNKNOWN_USER', { phone: cleanPhone });
             setShowSpectatorModal(true); 
         }
 
@@ -350,6 +358,7 @@ export const LoginPage = () => {
 
       try {
           // Record Spectator for Analytics
+          logEvent(roomId, 'SPECTATOR_CONVERSION', { phone: tempCredentials.phone });
           const unregisteredRef = ref(db, `rooms/${roomId}/unregistered/${phone}`);
           await set(unregisteredRef, {
               email: email,

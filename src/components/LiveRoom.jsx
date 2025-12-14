@@ -7,6 +7,7 @@ import { InteractionLayer } from './InteractionLayer';
 import { ModeratorPanel } from './ModeratorPanel';
 import { ref, get, onValue, update } from 'firebase/database';
 import { db } from '../lib/firebase';
+import { startSession, endSession } from '../lib/analytics';
 
 export const LiveRoom = ({ roomId }) => {
   const navigate = useNavigate();
@@ -63,6 +64,7 @@ export const LiveRoom = ({ roomId }) => {
   const clientRef = useRef(null);
   const localTracksRef = useRef({ audio: null, video: null });
   const isRunning = useRef(false);
+  const analyticsSessionKey = useRef(null);
 
   useEffect(() => {
     document.body.style.backgroundColor = "black";
@@ -96,6 +98,21 @@ export const LiveRoom = ({ roomId }) => {
 
     return () => unsub();
   }, [roomId, isHost, joined]);
+
+  useEffect(() => {
+      if (joined && !analyticsSessionKey.current) {
+          // START SESSION
+          analyticsSessionKey.current = startSession(roomId, verifiedRole || 'unknown', verifiedRole);
+      }
+      
+      return () => {
+          // END SESSION (User closed tab or navigated away)
+          if (analyticsSessionKey.current) {
+              endSession(roomId, analyticsSessionKey.current);
+              analyticsSessionKey.current = null;
+          }
+      };
+  }, [joined, roomId, verifiedRole]);
 
   useEffect(() => {
     if (isRunning.current) return;
