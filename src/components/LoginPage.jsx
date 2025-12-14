@@ -207,7 +207,7 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
                     <div className="animate-pulse font-mono text-xl">CALCULATING...</div>
                 )}
 
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/80 border-t border-b border-white/20 py-4 max-w-xs mx-auto">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/80 border-t border-b border-white/20 py-4 max-w-xs mx-auto animate-pulse">
                     {quip}
                 </p>
             </div>
