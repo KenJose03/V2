@@ -21,7 +21,7 @@ export default function handler(req, res) {
     }
 
     // 3. Prepare Params
-    const channelName = req.query.channelName || 'CHIC';
+    const channelName = req.query.channelName;
     const uid = 0;
     const role = RtcRole.PUBLISHER;
     const expirationTimeInSeconds = 3600;

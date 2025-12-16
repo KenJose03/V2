@@ -193,11 +193,16 @@ const WaitingScreen = ({ message, nextEvent, onTimerFinished }) => {
     );
 };
 
+function generateDefaultRoomId() {
+      const today = new Date().toISOString().split('T')[0]; // Returns "2023-10-27"
+      return `DIBS-${today}`; 
+  }
+
 // --- 3. MAIN LOGIN PAGE ---
 export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const roomId = searchParams.get('room') || "CHIC";
+  const [roomId, setRoomId] = useState(searchParams.get('room') || generateDefaultRoomId());
 
   const [currentScreen, setCurrentScreen] = useState('splash'); 
   const [waitingMessage, setWaitingMessage] = useState("");
@@ -214,6 +219,28 @@ export const LoginPage = () => {
   const [tempCredentials, setTempCredentials] = useState({ email: "", phone: "" });
 
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  useEffect(() => {
+      // If URL param is present, strictly obey it (Manual Override)
+      if (searchParams.get('room')) return;
+
+      const fetchActiveRoom = async () => {
+          try {
+              // Check the central config for the "Live" room
+              const configRef = ref(db, 'event_config/active_room_id');
+              const snapshot = await get(configRef);
+              
+              if (snapshot.exists()) {
+                  setRoomId(snapshot.val()); // Use the Admin-set room
+              }
+              // Else: It stays as the Date-based default we set in useState
+          } catch (err) {
+              console.error("Config fetch failed, using default:", roomId);
+          }
+      };
+      
+      fetchActiveRoom();
+  }, [searchParams]);
 
   const handleSmartLogin = async (e) => {
     e.preventDefault();

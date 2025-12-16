@@ -118,7 +118,7 @@ export const LiveRoom = ({ roomId }) => {
 
         // Try API first
         try {
-            const response = await fetch(`/api/token?channelName=${roomId || 'CHIC'}`);
+            const response = await fetch(`/api/token?channelName=${roomId}`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.token) token = data.token;
