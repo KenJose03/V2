@@ -537,7 +537,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator }) =
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={`Chat as ${username}...`}
-                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-xs sm:text-sm text-white focus:outline-none focus:border-white/60 transition-all font-display placeholder:text-white/30"
+                    className="w-full bg-black/50 backdrop-blur border border-white/20 rounded-full pl-4 pr-10 py-3 text-xs sm:text-sm text-white focus text-base :outline-none focus:border-white/60 transition-all font-display placeholder:text-white/30"
                 />
                 <button type="submit" className="absolute right-1 top-1 bottom-1 w-8 bg-white/10 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors">
                     <Send className="w-3 h-3" />
