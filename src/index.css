@@ -16,7 +16,7 @@ body {
   background-color: #1a0a00; /* Dark background for desktop "dead space" */
   color: white;
   margin: 0;
-  font-family: 'Inter', sans-serif; /* Default font */
+  font-family: 'Geist', sans-serif; /* Default font */
   overflow: hidden; /* Prevent scrolling the body, handle it inside the app */
 }
 
@@ -48,4 +48,22 @@ body {
 
 .font-retro {
   font-family: 'Chunko', sans-serif !important;
+}
+
+// COMMENT SECTION ANIMATION
+@keyframes comment-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The class to apply to each comment */
+.comment-anim {
+  animation: comment-fade-in 0.25s ease-out forwards;
+  will-change: transform, opacity;
 }
