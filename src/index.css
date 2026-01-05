@@ -26,7 +26,7 @@ body {
   max-width: 430px; /* Standard large phone width */
   margin: 0 auto;   /* Center it */
   height: 100vh;
-  background-color: #FF6600; /* Main Orange Theme */
+  background-color: #000000; /* Main Orange Theme */
   position: relative;
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.8); /* Nice shadow to separate from background */
   overflow: hidden;
