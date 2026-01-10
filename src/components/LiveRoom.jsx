@@ -138,7 +138,7 @@ export const LiveRoom = ({ roomId }) => {
           await myClient.setClientRole("host");
           try { setCameras(await AgoraRTC.getCameras()); } catch (e) {}
         } else {
-          await myClient.setClientRole("audience", { level: 2 });
+          await myClient.setClientRole("audience", { level: 1 });
         }
 
         myClient.on("user-published", async (user, mediaType) => {
