@@ -387,7 +387,7 @@ export const LiveRoom = ({ roomId }) => {
                     <button 
                         onClick={handleToggleStream}
                         className="absolute right-4 pointer-events-auto bg-white text-black px-6 py-3 rounded-full font-black text-xs tracking-widest uppercase transition-transform hover:scale-105 shadow-2xl flex items-center gap-2 z-[60]"
-                        style={{ bottom: 'calc(8.5rem + env(safe-area-inset-bottom))' }}
+                        style={{ bottom: 'calc(6.5rem + env(safe-area-inset-bottom))' }}
                     >
                         <Radio className="w-4 h-4 text-red-600 animate-pulse" />
                         GO LIVE
