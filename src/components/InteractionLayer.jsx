@@ -648,13 +648,16 @@ const getPhoneFromUserId = (userId) => {
                 
                 {/* Host Start/Stop Button */}
                 {isHost && (
-                    <button 
-                        onClick={toggleAuction} 
-                        className={`absolute right-4 h-11 px-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg z-50 pointer-events-auto ${isAuctionActive ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse' : 'bg-dibs-neon text-black hover:bg-white'}`}
-                        style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+                    <button
+                    onClick={toggleAuction}
+                    className={`h-10 px-8 mb-4 rounded-full font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg z-50 pointer-events-auto ${
+                        isAuctionActive
+                        ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
+                        : 'bg-dibs-neon text-black hover:bg-white'
+                    }`}
                     >
-                        {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                        {isAuctionActive ? "STOP" : "START"}
+                    {isAuctionActive ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                    {isAuctionActive ? "STOP" : ""}
                     </button>
                 )}
 
