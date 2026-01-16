@@ -243,12 +243,11 @@ export const LoginPage = () => {
       fetchActiveRoom();
   }, [searchParams]);
 
-  // --- UNIQUE NAMING LOGIC ---
-  const getUniqueUsername = async (roomId, userPhone) => {
+  // --- UNIQUE NAMING LOGIC (Refactored for Prefixes) ---
+  const getUniqueUsername = async (roomId, userPhone, prefix = "") => {
       const roomRef = ref(db, `audience_data/${roomId}`);
       
-      // 1. Check if USER already exists (Persistence)
-      // We scan to see if this phone number is already in the room to give them back their old name
+      // 1. Snapshot: Get all current users
       const snapshot = await get(roomRef);
       let existingName = null;
       let takenNames = new Set();
@@ -256,30 +255,33 @@ export const LoginPage = () => {
       if (snapshot.exists()) {
           const data = snapshot.val();
           Object.values(data).forEach(user => {
-              // Match by Phone to restore session
+              // Persistence Check: If this phone already has a name, return it
               if (user.phone === userPhone) {
                   existingName = user.username;
               }
-              // Collect all taken names
+              // Collect ALL taken names in the room
               if (user.username) {
                   takenNames.add(user.username);
               }
           });
       }
 
+      // If they already have a name (e.g. Spec_NeonTiger), return it immediately
       if (existingName) return existingName;
 
       // 2. Filter available names
-      const availableNames = NAME_LIST.filter(name => !takenNames.has(name));
+      // We check: Is "Prefix + Name" (e.g. "Spec_NeonTiger") already taken?
+      const availableNames = NAME_LIST.filter(name => !takenNames.has(prefix + name));
 
       // 3. Pick Random or Fallback
       if (availableNames.length > 0) {
           const randomIndex = Math.floor(Math.random() * availableNames.length);
-          return availableNames[randomIndex];
+          return prefix + availableNames[randomIndex];
       } else {
-          // Fallback: List is full, append random 3-digit number to base name
+          // Fallback: List is full, add random number
+          // Result: "Spec_NeonTiger-104"
           const baseName = NAME_LIST[Math.floor(Math.random() * NAME_LIST.length)];
-          return `${baseName}-${Math.floor(100 + Math.random() * 900)}`;
+          return `${prefix}${baseName}-${Math.floor(100 + Math.random() * 900)}`;
       }
   };
 
@@ -356,7 +358,9 @@ export const LoginPage = () => {
 
         if (testSnapshot.exists()) {
              if (testSnapshot.val().email.toLowerCase() === inputEmail) {
-                 await joinRoom('audience', `TEST-${cleanPhone}`, cleanPhone, inputEmail);
+                 // NEW: Generate Unique Name for Test User
+                 const uniqueName = await getUniqueUsername(roomId, cleanPhone);
+                 await joinRoom('audience', `TEST-${cleanPhone}`, cleanPhone, inputEmail, uniqueName);
                  return;
              } else {
                  setError("Test Email mismatch."); setLoading(false); return;
@@ -436,7 +440,10 @@ export const LoginPage = () => {
               phone: phone,
               timestamp: Date.now()
           });
-
+          
+          // --- CHANGED: Use Cool Name with Prefix ---
+          // This creates "Spec_NeonTiger", "Spec_CyberPunk", etc.
+          const uniqueName = await getUniqueUsername(roomId, phone, "Spec_");
           // Join with role='spectator'
           await joinRoom('spectator', specId, phone, email);
 
