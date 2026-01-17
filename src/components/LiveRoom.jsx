@@ -100,6 +100,42 @@ export const LiveRoom = ({ roomId }) => {
       };
   }, [joined, roomId, verifiedRole]);
 
+  // --- NEW: AUTO-ARCHIVE EVENT CONFIG ---
+  useEffect(() => {
+      // Only the Host performs this administrative task
+      if (!isHost || !roomId) return;
+
+      const archiveConfig = async () => {
+          try {
+              // 1. Check if we already saved the time for this room
+              const metaRef = ref(db, `rooms/${roomId}/metadata`);
+              const metaSnap = await get(metaRef);
+
+              if (!metaSnap.exists()) {
+                  // 2. If not, fetch the GLOBAL config
+                  const configRef = ref(db, `event_config`);
+                  const configSnap = await get(configRef);
+
+                  if (configSnap.exists()) {
+                      const { startTime, endTime } = configSnap.val();
+                      
+                      // 3. FREEZE it into the room's history
+                      await update(ref(db, `rooms/${roomId}/metadata`), {
+                          startTime: new Date(startTime).getTime(),
+                          endTime: new Date(endTime).getTime(),
+                          archivedAt: Date.now()
+                      });
+                      console.log("✅ Event Config Archived for Analytics");
+                  }
+              }
+          } catch (err) {
+              console.error("Failed to archive config", err);
+          }
+      };
+
+      archiveConfig();
+  }, [isHost, roomId]);
+
   // --- 3. MAIN CONNECTION LOGIC ---
   useEffect(() => {
     // A. GUARD CLAUSE: If Host is Offline, Audience waits here.
