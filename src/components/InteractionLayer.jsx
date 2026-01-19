@@ -120,6 +120,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   // --- PRESENCE SYSTEM (UPDATED: VISIBILITY TRACKING) ---
   useEffect(() => {
       if (!isHost && persistentUserId) {
+          console.log(`[Presence] Tracking for ${persistentUserId}`);
           const myPresenceRef = ref(db, `rooms/${roomId}/viewers/${persistentUserId}`);
           
           // Helper: Updates status in DB
@@ -128,7 +129,7 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
               set(myPresenceRef, {
                   state: status,       // 'online' or 'idle'
                   lastChanged: Date.now()
-              });
+              }).catch(err => console.error("Presence Write Failed:", err));
           };
 
           // 1. Initial Set: Online
@@ -151,8 +152,10 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
           // 4. Cleanup
           return () => { 
               document.removeEventListener("visibilitychange", handleVisibility);
-              remove(myPresenceRef); 
+    
           };
+      } else if (!isHost && !persistentUserId) {
+          console.warn("[Presence] No User ID found in URL. Tracking skipped.");
       }
   }, [roomId, isHost, persistentUserId]);
 
