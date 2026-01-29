@@ -370,7 +370,10 @@ useEffect(() => {
         {activeTab === 'history' && history.map((item, i) => (
             <div key={i} className="bg-white/5 border border-white/5 p-3 rounded-xl space-y-2">
                 <div className="flex justify-between border-b border-white/5 pb-2">
-                    <span className="font-bold text-white text-sm">{item.itemName}</span>
+                    <span className="font-bold text-white text-sm">
+                      {/* CHANGE: prefer snapshot if present */}
+                      {item.item?.name || item.itemName}
+                    </span>
                     <span className="font-mono text-dibs-neon">Sold: ₹{item.finalPrice}</span>
                 </div>
                 

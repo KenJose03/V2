@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus } from 'lucide-react';
+import { Send, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock, Play, Square, Eye, ShoppingBag, Plus, Minus, Trash2 } from 'lucide-react'; // CHANGE
 import { ref, push, onValue, runTransaction, update, set, onDisconnect, remove, get } from 'firebase/database'; 
 import { db } from '../lib/firebase';
 import Papa from 'papaparse'; // Import Parser
@@ -32,19 +32,33 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const [customBid, setCustomBid] = useState(10);
   const [viewerCount, setViewerCount] = useState(0);
   const [username, setUsername] = useState("");
-  
+
+  // CHANGE: custom items loaded from DB
+  const [customItems, setCustomItems] = useState([]);
+
   const [isAuctionActive, setIsAuctionActive] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30); 
+  const [timeLeft, setTimeLeft] = useState(30);
   const [endTime, setEndTime] = useState(0);
-  
-  const [currentItemId, setCurrentItemId] = useState(null);
+
+  // CHANGE: current item becomes a snapshot object (static/custom)
+  const [selectedItem, setSelectedItem] = useState(null); // { kind: 'static'|'custom', id, name, desc, startPrice }
+
   const [showInventory, setShowInventory] = useState(false);
+
+  // CHANGE: modal state for adding custom items
+  const [showAddCustomItem, setShowAddCustomItem] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemDesc, setNewItemDesc] = useState("");
 
   const chatEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const isAuctionActiveRef = useRef(false);
-  const currentBidRef = useRef(0); 
-  const currentItemRef = useRef(null); 
+  const currentBidRef = useRef(0);
+
+  // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
+  const currentItemRef = useRef(null);
+
   const stopTriggeredRef = useRef(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
 
@@ -54,12 +68,15 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   const persistentDbKey = searchParams.get('dbKey');
   const persistentUserId = searchParams.get('uid');
 
-  useEffect(() => {
+    useEffect(() => {
     const chatRef = ref(db, `rooms/${roomId}/chat`);
     const bidRef = ref(db, `rooms/${roomId}/bid`);
     const auctionRef = ref(db, `rooms/${roomId}/auction`);
     const viewersRef = ref(db, `rooms/${roomId}/viewers`);
     const itemRef = ref(db, `rooms/${roomId}/currentItem`);
+
+    // CHANGE: custom items live in DB per-room
+    const customItemsRef = ref(db, `rooms/${roomId}/customItems`);
 
     const unsubChat = onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
@@ -67,16 +84,13 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
     });
 
     const unsubAuction = onValue(auctionRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            setIsAuctionActive(data.isActive);
-            isAuctionActiveRef.current = data.isActive; 
-            setEndTime(data.endTime || 0);
-            // NEW: Reset the stop trigger when auction starts
-            if (data.isActive) {
-                stopTriggeredRef.current = false;
-            }
-        }
+      const data = snapshot.val();
+      if (data) {
+        setIsAuctionActive(data.isActive);
+        isAuctionActiveRef.current = data.isActive;
+        setEndTime(data.endTime || 0);
+        if (data.isActive) stopTriggeredRef.current = false;
+      }
     });
 
     const unsubBid = onValue(bidRef, (snapshot) => {
@@ -84,23 +98,85 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
       setCurrentBid(price);
       currentBidRef.current = price;
       setCustomBid((prev) => {
-          const minNextBid = price + 10;
-          if (!isAuctionActiveRef.current) return minNextBid;
-          return prev < minNextBid ? minNextBid : prev;
+        const minNextBid = price + 10;
+        if (!isAuctionActiveRef.current) return minNextBid;
+        return prev < minNextBid ? minNextBid : prev;
       });
     });
 
     const unsubViewers = onValue(viewersRef, (snapshot) => {
-        setViewerCount(snapshot.size);
+      setViewerCount(snapshot.size);
     });
 
     const unsubItem = onValue(itemRef, (snapshot) => {
-        const id = snapshot.val();
-        setCurrentItemId(id);
-        currentItemRef.current = id;
+      const raw = snapshot.val();
+
+      if (!raw) {
+        setSelectedItem(null);
+        currentItemRef.current = null;
+        return;
+      }
+
+      // CHANGE: backwards compatible — old schema stored just a numeric item id
+      if (typeof raw === "number") {
+        const item = INVENTORY.find((i) => i.id === raw);
+        const normalized = item
+          ? {
+              kind: "static",
+              id: item.id,
+              name: item.name,
+              desc: item.desc || "",
+              startPrice: Number(item.startPrice) || 0,
+            }
+          : { kind: "static", id: raw, name: `Item #${raw}`, desc: "", startPrice: 0 };
+
+        setSelectedItem(normalized);
+        currentItemRef.current = normalized;
+        return;
+      }
+
+      // CHANGE: new schema stores full snapshot object
+      const normalized = {
+        kind: raw.kind === "custom" ? "custom" : "static",
+        id: raw.id,
+        name: typeof raw.name === "string" ? raw.name : "Unknown Item",
+        desc: typeof raw.desc === "string" ? raw.desc : "",
+        startPrice: Number(raw.startPrice) || 0,
+      };
+
+      setSelectedItem(normalized);
+      currentItemRef.current = normalized;
     });
 
-    return () => { unsubChat(); unsubBid(); unsubAuction(); unsubViewers(); unsubItem(); };
+    // CHANGE: load custom items from DB
+    const unsubCustomItems = onValue(customItemsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setCustomItems([]);
+        return;
+      }
+
+      const items = Object.entries(data).map(([id, val]) => ({
+        kind: "custom",
+        id,
+        name: typeof val?.name === "string" ? val.name : "Custom Item",
+        desc: typeof val?.desc === "string" ? val.desc : "",
+        startPrice: Number(val?.startPrice) || 0,
+        createdAt: Number(val?.createdAt) || 0,
+      }));
+
+      items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setCustomItems(items);
+    });
+
+    return () => {
+      unsubChat();
+      unsubBid();
+      unsubAuction();
+      unsubViewers();
+      unsubItem();
+      unsubCustomItems();
+    };
   }, [roomId]);
 
   // --- SYNC USERNAME ---
@@ -185,12 +261,22 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
     }
   }, [messages]);
 
-  const currentItem = INVENTORY.find(i => i.id === currentItemId);
+  // CHANGE: merged list = custom items (DB) + static CSV
+  const inventoryItems = [
+    ...customItems,
+    ...INVENTORY.map((i) => ({
+      kind: "static",
+      id: i.id,
+      name: i.name,
+      desc: i.desc || "",
+      startPrice: Number(i.startPrice) || 0,
+    })),
+  ];
 
-  // Reset expansion when item changes
+  // CHANGE: reset by selected item instead of numeric id
   useEffect(() => {
-      setIsDescExpanded(false);
-  }, [currentItemId]);
+    setIsDescExpanded(false);
+  }, [selectedItem?.kind, selectedItem?.id]);
 
   // --- LISTEN FOR MODERATOR ACTIONS ---
   useEffect(() => {
@@ -230,11 +316,76 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
     setInput("");
   };
 
+    // CHANGE: only host can select the auction item
   const selectItem = (item) => {
-      if (isAuctionActive) return; 
-      set(ref(db, `rooms/${roomId}/currentItem`), item.id);
-      set(ref(db, `rooms/${roomId}/bid`), item.startPrice); 
-      setShowInventory(false);
+    if (isAuctionActive) return;
+    if (!isHost) return;
+
+    // CHANGE: store the full snapshot in DB (works for static + custom)
+    const itemSnapshot = {
+      kind: item.kind === "custom" ? "custom" : "static",
+      id: item.id,
+      name: typeof item.name === "string" ? item.name : "Unknown Item",
+      desc: typeof item.desc === "string" ? item.desc : "",
+      startPrice: Number(item.startPrice) || 0,
+    };
+
+    set(ref(db, `rooms/${roomId}/currentItem`), itemSnapshot);
+
+    // CHANGE: starting bid = custom item price
+    set(ref(db, `rooms/${roomId}/bid`), itemSnapshot.startPrice);
+
+    setShowInventory(false);
+  };
+
+  // CHANGE: host+moderator can open add-item modal
+  const openAddCustomItem = () => {
+    if (!(isHost || isModerator)) return;
+    setShowAddCustomItem(true);
+    setShowInventory(false);
+  };
+
+  // CHANGE: helper to clear modal fields
+  const resetAddCustomItemForm = () => {
+    setNewItemName("");
+    setNewItemPrice("");
+    setNewItemDesc("");
+  };
+
+  // CHANGE: write custom item to DB under rooms/{roomId}/customItems
+  const submitAddCustomItem = async (e) => {
+    e.preventDefault();
+    if (!(isHost || isModerator)) return;
+
+    const name = newItemName.trim();
+    const price = parseInt(newItemPrice, 10);
+    const desc = newItemDesc.trim();
+
+    if (!name) return alert("Please enter an item name.");
+    if (!Number.isFinite(price) || price < 0) return alert("Please enter a valid starting bid.");
+
+    await push(ref(db, `rooms/${roomId}/customItems`), {
+      name,
+      desc,
+      startPrice: price,
+      createdAt: Date.now(),
+      createdByRole: isHost ? "host" : "moderator",
+    });
+
+    setShowAddCustomItem(false);
+    resetAddCustomItemForm();
+  };
+   const deleteCustomItem = async (itemId) => {
+    if (!(isHost || isModerator)) return;
+    if (!window.confirm("Delete this custom item?")) return;
+
+    // CHANGE: remove from DB
+    await remove(ref(db, `rooms/${roomId}/customItems/${itemId}`));
+
+    // CHANGE: if the deleted item is currently selected, clear selection
+    if (selectedItem?.kind === 'custom' && selectedItem?.id === itemId) {
+      await set(ref(db, `rooms/${roomId}/currentItem`), null);
+    }
   };
 
   const handlePriceChange = (e) => {
@@ -363,31 +514,36 @@ const getPhoneFromUserId = (userId) => {
     logEvent(roomId, 'BID_PLACED', { 
                 user: username, 
                 amount: customBid, 
-                item: currentItem ? currentItem.name : 'Unknown' 
+                item: currentItemRef.current ? currentItemRef.current.name : 'Unknown'
+
             });
   };
 
   const startAuction = () => {
-      if (!currentItemId) {
-          alert("Please select an item first!");
-          return;
-      }
-      const newEndTime = Date.now() + (20 * 1000);
-      update(ref(db, `rooms/${roomId}`), {
-          "auction/isActive": true,
-          "auction/endTime": newEndTime,
-          "lastBidder": null
-      });
-      const item = INVENTORY.find(i => i.id === currentItemId);
-      push(ref(db, `rooms/${roomId}/chat`), {
-        text: `🚨 AUCTION STARTED: ${item ? item.name : 'Item'} at ₹${currentBid}!`,
-        type: 'auction'
-      });
+    // CHANGE: require selected snapshot (works for static/custom)
+    if (!currentItemRef.current) {
+      alert("Please select an item first!");
+      return;
+    }
+
+    const newEndTime = Date.now() + (20 * 1000);
+    update(ref(db, `rooms/${roomId}`), {
+      "auction/isActive": true,
+      "auction/endTime": newEndTime,
+      "lastBidder": null,
+    });
+
+    const item = currentItemRef.current;
+    push(ref(db, `rooms/${roomId}/chat`), {
+    // CHANGE: fix template literal so it's valid JS
+    text: `🛑 ${winnerName} CALLED DIBS ON ${item ? item.name : 'ITEM'} FOR ₹${finalPrice}!`,
+    type: 'auction'
+    });
   };
 
   const stopAuction = async () => {
       const finalPrice = currentBidRef.current;
-      const item = INVENTORY.find(i => i.id === currentItemRef.current);
+      const item = currentItemRef.current;
       
       if (isAuctionActiveRef.current) { 
         const snapshot = await get(ref(db, `rooms/${roomId}/lastBidder`));
@@ -414,11 +570,12 @@ const getPhoneFromUserId = (userId) => {
 
         // 3. NEW: Push to History
         push(ref(db, `rooms/${roomId}/auctionHistory`), {
-            itemName: item ? item.name : 'Unknown Item',
-            finalPrice: finalPrice,
-            winner: winnerName,
-            topBidders: top3,
-            timestamp: Date.now()
+          itemName: item ? item.name : "Unknown Item",
+          item: item || null, // CHANGE: snapshot stored here
+          finalPrice: finalPrice,
+          winner: winnerName,
+          topBidders: top3,
+          timestamp: Date.now(),
         });
         
         push(ref(db, `rooms/${roomId}/chat`), {
@@ -567,68 +724,193 @@ const getPhoneFromUserId = (userId) => {
             {/* Item Card (Unchanged content, width handled by parent) */}
             <div className="z-[60] mb-4 relative">
                 <AnimatePresence>
-                {showInventory && isHost && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                        className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto z-[70]"
-                    >
-                        <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 bg-black/50">
-                            Select Item to Auction
-                        </div>
-                        {INVENTORY.map(item => (
-                            <button 
-                                key={item.id}
-                                onClick={() => selectItem(item)}
-                                className="p-3 text-left hover:bg-white/10 transition-colors border-b border-white/5 last:border-0 group"
-                            >
-                                <div className="flex justify-between w-full">
-                                    <span className="text-sm font-bold text-white group-hover:text-[#FF6600] transition-colors">{item.name}</span>
-                                    <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
-                                </div>
-                                <span className="text-xs text-zinc-400 truncate block mt-0.5">{item.desc}</span>
-                            </button>
-                        ))}
-                    </motion.div>
-                    )}
-                </AnimatePresence>
-                {currentItem ? (
-                    <div 
-                        onClick={() => isHost && !isAuctionActive && setShowInventory(!showInventory)}
-                        className={`
-                                w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/10
-                                ${isHost && !isAuctionActive ? 'cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all' : ''}
-                            `}
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-[#FF6600] uppercase tracking-wider">ITEM #{currentItem.id}</span>
-                            {isHost && !isAuctionActive && <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? 'rotate-180' : ''}`} />}
-                        </div>
-                        <h3 className="text-lg font-bold text-white leading-tight truncate mt-0.5">{currentItem.name}</h3>
-                        <div 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setIsDescExpanded(!isDescExpanded);
-                            }}
-                            className={`text-xs text-zinc-400 cursor-pointer transition-all duration-300 ${isDescExpanded ? 'whitespace-normal break-words' : 'truncate'}`}
-                        >
-                            {currentItem.desc}
-                            {!isDescExpanded && currentItem.desc.length > 30 && (
-                                <span className="text-[10px] text-[#FF6600] ml-1 font-bold opacity-80">more</span>
-                            )}
-                        </div>
+                {/* CHANGE: host OR moderator can open inventory and add custom items */}
+                {showInventory && (isHost || isModerator) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                    className="absolute bottom-full mb-2 left-0 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-64 overflow-y-auto z-[70]"
+                  >
+                    <div className="p-3 border-b border-white/10 text-[10px] font-bold uppercase tracking-widest text-zinc-500 bg-black/50 flex items-center justify-between gap-2">
+                      <span>{isHost ? "Select Item to Auction" : "Inventory"}</span>
+
+                      {/* CHANGE: custom add button */}
+                      <button
+                        type="button"
+                        onClick={openAddCustomItem}
+                        className="pointer-events-auto text-[10px] font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded-lg border border-white/10 transition-colors"
+                      >
+                        + Custom
+                      </button>
                     </div>
-                ) : (
-                    isHost && (
-                        <button onClick={() => setShowInventory(!showInventory)} className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2">
-                            <ShoppingBag className="w-4 h-4" />
-                            SELECT ITEM TO AUCTION
+
+                    {inventoryItems.map((item) => {
+                      const canSelect = isHost && !isAuctionActive; // CHANGE: only host selects item
+                      return (
+                        <button
+                          key={`${item.kind}:${item.id}`}
+                          type="button"
+                          onClick={() => {
+                            if (canSelect) selectItem(item);
+                          }}
+                          disabled={!canSelect}
+                          className={`p-3 text-left transition-colors border-b border-white/5 last:border-0 group ${
+                            canSelect ? "hover:bg-white/10" : "opacity-60 cursor-not-allowed"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center w-full gap-2">
+                            <span className="text-sm font-bold text-white ...">
+                                {item.name}
+                                {item.kind === "custom" && (<span className="ml-1 ...">(Custom)</span>)}
+                            </span>
+
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-display text-dibs-neon">₹{item.startPrice}</span>
+
+                                {/* CHANGE: delete button only for custom items */}
+                                {item.kind === "custom" && (isHost || isModerator) && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteCustomItem(item.id);
+                                    }}
+                                    className="p-1 rounded-md bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-zinc-400 hover:text-red-400 transition-colors"
+                                    title="Delete custom item"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                                )}
+                            </div>
+                            </div>
+                          <span className="text-xs text-zinc-400 truncate block mt-0.5">{item.desc}</span>
                         </button>
-                    )
+                      );
+                    })}
+                  </motion.div>
+                )}
+                </AnimatePresence>
+                {/* CHANGE: show selectedItem instead of CSV-only currentItem */}
+                {selectedItem ? (
+                  <div
+                    onClick={() => {
+                      if ((isHost && !isAuctionActive) || isModerator) setShowInventory(!showInventory); // CHANGE
+                    }}
+                    className={`
+                      w-full bg-black rounded-2xl p-3 flex flex-col gap-1 shadow-2xl border border-white/10
+                      ${(isHost && !isAuctionActive) || isModerator ? "cursor-pointer hover:bg-zinc-900 active:scale-95 transition-all" : ""}
+                    `}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-[#FF6600] uppercase tracking-wider">
+                        {selectedItem.kind === "custom" ? "CUSTOM ITEM" : `ITEM #${selectedItem.id}`}
+                      </span>
+                      {((isHost && !isAuctionActive) || isModerator) && (
+                        <ChevronUp className={`w-4 h-4 text-zinc-500 transition-transform ${showInventory ? "rotate-180" : ""}`} />
+                      )}
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white leading-tight truncate mt-0.5">{selectedItem.name}</h3>
+
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDescExpanded(!isDescExpanded);
+                      }}
+                      className={`text-xs text-zinc-400 cursor-pointer transition-all duration-300 ${
+                        isDescExpanded ? "whitespace-normal break-words" : "truncate"
+                      }`}
+                    >
+                      {selectedItem.desc}
+                      {!isDescExpanded && selectedItem.desc.length > 30 && (
+                        <span className="text-[10px] text-[#FF6600] ml-1 font-bold opacity-80">more</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  (isHost || isModerator) && (
+                    <button
+                      onClick={() => setShowInventory(!showInventory)}
+                      className="bg-dibs-neon text-black font-bold text-xs px-4 py-3 rounded-xl shadow-lg hover:bg-white transition-colors flex items-center gap-2"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      {isHost ? "SELECT ITEM TO AUCTION" : "MANAGE INVENTORY"}
+                    </button>
+                  )
                 )}
             </div>
         </div>
+
+                {/* CHANGE: custom item modal */}
+        <AnimatePresence>
+          {showAddCustomItem && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-[80] pointer-events-auto flex items-center justify-center bg-black/70 backdrop-blur"
+              onClick={() => {
+                setShowAddCustomItem(false);
+                resetAddCustomItemForm();
+              }}
+            >
+              <motion.form
+                initial={{ y: 20, scale: 0.98, opacity: 0 }}
+                animate={{ y: 0, scale: 1, opacity: 1 }}
+                exit={{ y: 20, scale: 0.98, opacity: 0 }}
+                onSubmit={submitAddCustomItem}
+                onClick={(e) => e.stopPropagation()}
+                className="w-[92%] max-w-sm bg-black border border-white/10 rounded-2xl p-4 shadow-2xl"
+              >
+                <div className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-3">Add Custom Item</div>
+
+                <div className="space-y-2">
+                  <input
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Item name"
+                    className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-white/40"
+                  />
+                  <input
+                    value={newItemPrice}
+                    onChange={(e) => setNewItemPrice(e.target.value)}
+                    placeholder="Starting bid (number)"
+                    inputMode="numeric"
+                    className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-white/40"
+                  />
+                  <textarea
+                    value={newItemDesc}
+                    onChange={(e) => setNewItemDesc(e.target.value)}
+                    placeholder="Description (optional)"
+                    rows={3}
+                    className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-white/40 resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCustomItem(false);
+                      resetAddCustomItemForm();
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-white/70 hover:text-white border border-white/10 hover:bg-white/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest bg-[#FF6600] text-white hover:bg-[#ff8533] transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </motion.form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
 
         {/* RIGHT COLUMN: HIDDEN FOR SPECTATORS */}
         {!isSpectator && (
