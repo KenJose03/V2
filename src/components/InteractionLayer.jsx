@@ -59,6 +59,8 @@ export const InteractionLayer = ({ roomId, isHost, isModerator, isSpectator, ass
   // CHANGE: ref holds the same snapshot as selectedItem (not just an id)
   const currentItemRef = useRef(null);
 
+  //new
+
   const stopTriggeredRef = useRef(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
 
